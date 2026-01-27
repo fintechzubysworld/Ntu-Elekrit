@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ntu Electricity Management System v3.8.1 (Branding Edition)</title>
+    <title>Ntu Electricity Management System v3.8.2 (Cloud Edition)</title>
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://accounts.google.com/gsi/client"></script>
+    <script src="https://apis.google.com/js/api.js"></script>
     
     <style>
         :root {
@@ -55,7 +57,6 @@
         .btn-success { background: var(--accent); color: white; }
         .btn-danger { background: var(--danger); color: white; }
         .btn-warning { background: var(--warning); color: white; }
-        .btn-info { background: #3498db; color: white; }
         .btn:hover { opacity: 0.9; }
 
         /* Tables */
@@ -66,54 +67,47 @@
         tr:nth-child(even) { background: #fcfcfc; }
         tr:hover { background: #f1f1f1; }
 
-        /* Cards & Stats */
+        /* Receipt & Branding */
+        .receipt-container { max-width: 400px; margin: 0 auto; border: 2px dashed #333; padding: 20px; background: #fffbe6; font-family: 'Courier New', Courier, monospace; position: relative; }
+        .branding-seal { max-width: 80px; position: absolute; bottom: 60px; right: 20px; opacity: 0.8; }
+        .branding-sig { max-width: 120px; border-bottom: 1px solid #333; display: block; margin: 10px 0 5px 0; }
+
+        /* Stats */
         .stats-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 30px; }
         .stat-card { background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; border-left: 4px solid var(--secondary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .stat-card h3 { margin: 0; font-size: 24px; color: var(--primary); }
         .stat-card p { margin: 5px 0 0; color: #7f8c8d; font-size: 13px; }
 
-        /* Messages */
         .alert { padding: 12px; margin-bottom: 20px; border-radius: 4px; display: none; }
         .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-
-        /* Receipt & Print */
-        .receipt-container { max-width: 400px; margin: 0 auto; border: 2px dashed #333; padding: 20px; background: #fffbe6; font-family: 'Courier New', Courier, monospace; position: relative; }
-        .branding-seal { max-width: 80px; position: absolute; bottom: 60px; right: 20px; opacity: 0.8; }
-        .branding-sig { max-width: 120px; border-bottom: 1px solid #333; display: block; margin: 10px 0 5px 0; }
         
         @media print {
             .nav-bar, .no-print, .header { display: none; }
             .container { box-shadow: none; border: none; margin: 0; max-width: 100%; }
-            .section { padding: 0; }
-            .receipt-container { border: 2px solid black; position: absolute; top: 0; left: 0; width: 100%; max-width: 100%; }
+            .receipt-container { border: 2px solid black; }
         }
-
         .hidden { display: none !important; }
-        
-        /* Badges */
         .badge { padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: bold; text-transform: uppercase; color: white; }
         .badge-superadmin { background: #8e44ad; }
         .badge-admin { background: #2980b9; }
         .badge-leader { background: #e67e22; }
         .badge-collector { background: #27ae60; }
-        
-        .text-muted { color: #7f8c8d; }
     </style>
 </head>
 <body>
 
 <div id="view-login" class="container" style="max-width: 400px; margin-top: 60px; padding: 20px;">
     <div style="text-align: center; margin-bottom: 20px;">
-        <h2 style="color: var(--primary);">Ntu Electricity System v3.8.1</h2>
-        <p>Branding & Auth Edition</p>
+        <h2 style="color: var(--primary);">Ntu Electricity System</h2>
+        <p>Google Cloud Vault Edition</p>
     </div>
     
-    <div style="background: #eef2f7; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center;">
-        <p style="margin-top:0; font-size:12px; color:#555;">Data Storage Status</p>
-        <div id="storage-msg" style="font-weight:bold; color: var(--danger); margin-bottom:10px;">Checking History...</div>
-        <button class="btn btn-warning btn-sm" onclick="FileSystem.connect()" id="btn-connect-drive">📂 Connect Database Folder</button>
-        <div id="history-hint" style="font-size: 10px; color: #777; margin-top: 5px;">First time? Select your OneDrive folder.</div>
+    <div id="cloud-setup-box" style="background: #eef2f7; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center;">
+        <p style="margin-top:0; font-size:12px; color:#555;">Cloud Sync Status</p>
+        <div id="storage-msg" style="font-weight:bold; color: var(--danger); margin-bottom:10px;">Cloud Disconnected</div>
+        <button class="btn btn-warning btn-sm" onclick="CloudStorage.initiateAuth()" id="btn-connect-drive">☁ Sign-in to Google Drive</button>
+        <div id="history-hint" style="font-size: 10px; color: #777; margin-top: 5px;">Required to load system data.</div>
     </div>
 
     <div id="login-alert" class="alert"></div>
@@ -126,7 +120,7 @@
             <label>Password</label>
             <input type="password" id="login-pass" required>
         </div>
-        <button type="submit" class="btn btn-primary" style="width: 100%;">Access System</button>
+        <button type="submit" id="btn-login-submit" class="btn btn-primary" style="width: 100%;" disabled>Wait for Cloud Sync...</button>
     </form>
 </div>
 
@@ -137,74 +131,55 @@
             <small id="user-role-display" style="opacity: 0.9; font-size: 12px;"></small>
         </div>
         <div class="no-print" style="display: flex; gap: 10px; align-items: center;">
-            <button onclick="App.showChangePassword()" class="btn btn-warning btn-sm" title="Change Password">🔐</button>
-            <div class="storage-status" onclick="FileSystem.connect()" title="Click to reconnect/change">
+            <div class="storage-status" onclick="CloudStorage.initiateAuth()">
                 <span class="dot" id="status-dot"></span>
-                <span id="status-text">Storage: Local</span>
+                <span id="status-text">Cloud Syncing</span>
             </div>
             <button onclick="Auth.logout()" class="btn btn-danger btn-sm">Logout</button>
         </div>
     </div>
 
     <div class="nav-bar no-print">
-        <button class="nav-btn active" onclick="Router.go('dashboard')" id="nav-dashboard">Dashboard (Vault)</button>
-        
+        <button class="nav-btn active" onclick="Router.go('dashboard')" id="nav-dashboard">Dashboard</button>
         <span id="field-menu" class="hidden" style="display: contents;">
-            <button class="nav-btn" onclick="Router.go('register')" id="nav-register-field">Register Household</button>
+            <button class="nav-btn" onclick="Router.go('register')" id="nav-register">Register Household</button>
             <button class="nav-btn" onclick="Router.go('collection')" id="nav-collection">Collection</button>
             <button class="nav-btn" onclick="Router.go('statement')" id="nav-statement">Statement</button>
         </span>
-        
         <button class="nav-btn" onclick="Router.go('reports')" id="nav-reports">Reports</button>
-        
         <span id="admin-menu" class="hidden" style="display: contents;">
-            <button class="nav-btn" onclick="Router.go('remittance')" id="nav-remittance">Kindred Remittance</button>
+            <button class="nav-btn" onclick="Router.go('remittance')" id="nav-remittance">Remittance</button>
             <button class="nav-btn" onclick="Router.go('billing')" id="nav-billing">Billing</button>
-            <button class="nav-btn" onclick="Router.go('data')" id="nav-data">Data & Backup</button>
-            <button class="nav-btn" onclick="Router.go('settings')" id="nav-settings">User & Branding</button>
+            <button class="nav-btn" onclick="Router.go('settings')" id="nav-settings">Branding & Users</button>
+            <button class="nav-btn" onclick="Router.go('data')" id="nav-data">Backups</button>
         </span>
-
         <button class="nav-btn hidden" onclick="Router.go('audit')" id="nav-audit">Audit</button>
-        <button class="nav-btn hidden" onclick="Router.go('wipe')" id="nav-wipe" style="color: #e74c3c;">Wipe</button>
     </div>
 
     <div style="padding: 0 25px; margin-top: 15px;">
         <div id="global-alert" class="alert"></div>
-        <div id="autosave-indicator" style="display:none; color: var(--accent); font-size: 11px; text-align: right; font-style: italic;">Syncing to OneDrive...</div>
+        <div id="autosave-indicator" style="display:none; color: var(--accent); font-size: 11px; text-align: right; font-style: italic;">Updating Cloud...</div>
     </div>
 
     <div id="dashboard" class="section active">
         <div class="stats-container">
             <div class="stat-card">
                 <h3 id="dash-households">0</h3>
-                <p>Registered Households</p>
-            </div>
-            <div class="stat-card">
-                <h3 id="dash-debt">₦0.00</h3>
-                <p>Total Village Debt</p>
+                <p>Households</p>
             </div>
             <div class="stat-card">
                 <h3 id="dash-collected">₦0.00</h3>
-                <p>Total Collected (Households)</p>
+                <p>Household Payments</p>
             </div>
             <div class="stat-card">
                 <h3 id="dash-remitted" style="color: var(--accent);">₦0.00</h3>
-                <p>Total Remitted (Kindreds)</p>
+                <p>Kindred Remittances</p>
             </div>
         </div>
-
-        <h3>Kindred Financial Overview</h3>
+        <h3>Kindred Overviews</h3>
         <div class="table-responsive">
             <table>
-                <thead>
-                    <tr>
-                        <th>Kindred</th>
-                        <th>Total Bill Allocated</th>
-                        <th>Household Collections</th>
-                        <th>Remitted to Admin</th>
-                        <th>Outstanding Balance</th>
-                    </tr>
-                </thead>
+                <thead><tr><th>Kindred</th><th>Allocated Bill</th><th>Collected</th><th>Remitted</th><th>Balance</th></tr></thead>
                 <tbody id="dash-table-body"></tbody>
             </table>
         </div>
@@ -213,692 +188,317 @@
     <div id="register" class="section">
         <h3>Register New Household</h3>
         <div class="form-grid">
-            <div class="form-group">
-                <label>Kindred</label>
-                <select id="reg-kindred">
-                    <option value="Oduebo">Oduebo</option>
-                    <option value="Oparadim">Oparadim</option>
-                    <option value="Ezealaoma">Ezealaoma</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Sub-Kindred</label>
-                <input type="text" id="reg-sub" placeholder="e.g. Umueze">
-            </div>
-            <div class="form-group">
-                <label>Owner Name</label>
-                <input type="text" id="reg-owner" placeholder="Full Name">
-            </div>
-            <div class="form-group">
-                <label>Phone</label>
-                <input type="text" id="reg-phone" placeholder="080...">
-            </div>
+            <div class="form-group"><label>Kindred</label><select id="reg-kindred"><option>Oduebo</option><option>Oparadim</option><option>Ezealaoma</option></select></div>
+            <div class="form-group"><label>Sub-Kindred</label><input type="text" id="reg-sub" placeholder="e.g. Umueze"></div>
+            <div class="form-group"><label>Owner Name</label><input type="text" id="reg-owner" placeholder="Full Name"></div>
+            <div class="form-group"><label>Phone</label><input type="text" id="reg-phone" placeholder="080..."></div>
         </div>
-        <button class="btn btn-primary" onclick="App.registerHousehold()">Generate Account & Save</button>
+        <button class="btn btn-primary" onclick="App.registerHousehold()">Save & Generate ID</button>
     </div>
 
     <div id="collection" class="section">
-        <div style="display: flex; justify-content: space-between;">
-            <h3>Household Collection</h3>
-            <button class="btn btn-warning" onclick="Router.go('search')">Find Account #</button>
-        </div>
-        
+        <h3>Payment Collection</h3>
         <div style="background: var(--light); padding: 20px; border-radius: 8px;">
             <div class="form-grid">
-                <div class="form-group">
-                    <label>Account Number</label>
-                    <input type="text" id="pay-acc" placeholder="Enter ID (e.g. ODUMJO55)">
-                </div>
-                <div class="form-group">
-                    <label>Amount (₦)</label>
-                    <input type="number" id="pay-amt" placeholder="0.00">
-                </div>
-                <div class="form-group">
-                    <label>Value Date</label>
-                    <input type="date" id="pay-date">
-                </div>
-                <div class="form-group">
-                    <label>Particulars</label>
-                    <input type="text" id="pay-part" placeholder="e.g. Jan Bill / Arrears">
-                </div>
+                <div class="form-group"><label>Account ID</label><input type="text" id="pay-acc" placeholder="e.g. ODUMJO55"></div>
+                <div class="form-group"><label>Amount (₦)</label><input type="number" id="pay-amt"></div>
+                <div class="form-group"><label>Date</label><input type="date" id="pay-date"></div>
             </div>
-            <button class="btn btn-success" onclick="App.processCollection()">Process Payment</button>
+            <button class="btn btn-success" onclick="App.processCollection()">Submit Payment</button>
         </div>
     </div>
 
     <div id="remittance" class="section">
-        <h3>Kindred Bulk Remittance</h3>
-        <p class="text-muted">Record bulk payments handed over by Kindred Leaders to the Administration.</p>
-        
-        <div style="background: #e8f6f3; padding: 20px; border-radius: 8px; border: 1px solid #d4efdf;">
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>Select Kindred</label>
-                    <select id="remit-kindred">
-                        <option value="Oduebo">Oduebo</option>
-                        <option value="Oparadim">Oparadim</option>
-                        <option value="Ezealaoma">Ezealaoma</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Amount Remitted (₦)</label>
-                    <input type="number" id="remit-amt">
-                </div>
-                <div class="form-group">
-                    <label>Date</label>
-                    <input type="date" id="remit-date">
-                </div>
-                <div class="form-group">
-                    <label>Notes / Receipt Ref</label>
-                    <input type="text" id="remit-note" placeholder="Manual Receipt #">
-                </div>
-            </div>
-            <button class="btn btn-primary" onclick="App.processRemittance()">Record Remittance</button>
-        </div>
-
-        <h4>Remittance History</h4>
-        <div class="table-responsive">
-            <table>
-                <thead>
-                    <tr><th>Date</th><th>Kindred</th><th>Amount</th><th>Ref</th><th>Entered By</th><th>Action</th></tr>
-                </thead>
-                <tbody id="remit-history-body"></tbody>
-            </table>
-        </div>
-    </div>
-
-    <div id="reports" class="section">
-        <h3>System Reports</h3>
+        <h3>Kindred to Admin Remittance</h3>
         <div class="form-grid">
-            <div class="form-group">
-                <label>Report Type</label>
-                <select id="report-type">
-                    <option value="tx_household">Household Transactions</option>
-                    <option value="tx_remittance">Kindred Remittances</option>
-                    <option value="households">Registered Households</option>
-                    <option value="statement">Household Statement</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <button class="btn btn-primary" style="margin-top: 22px;" onclick="App.generateReport()">Generate View</button>
-            </div>
+            <div class="form-group"><label>Kindred</label><select id="remit-kindred"><option>Oduebo</option><option>Oparadim</option><option>Ezealaoma</option></select></div>
+            <div class="form-group"><label>Amount (₦)</label><input type="number" id="remit-amt"></div>
         </div>
+        <button class="btn btn-primary" onclick="App.processRemittance()">Record Remittance</button>
         <div class="table-responsive">
-            <table id="report-table">
-                <thead id="report-head"></thead>
-                <tbody id="report-body"></tbody>
-            </table>
-        </div>
-    </div>
-
-    <div id="billing" class="section">
-        <h3>Monthly Village Billing</h3>
-        <div class="alert alert-warning" style="display:block">
-            Input the total bulk bill for the village. This will be automatically split 33.33% to each Kindred.
-        </div>
-        <div class="form-group">
-            <label>Total Bill Amount (₦)</label>
-            <input type="number" id="bill-amount">
-        </div>
-        <button class="btn btn-primary" onclick="App.addBill()">Allocate Bill</button>
-    </div>
-
-    <div id="search" class="section">
-        <h3>Search Households</h3>
-        <input type="text" id="search-query" placeholder="Search Name, Phone, or Account No..." onkeyup="App.search(this.value)">
-        <div class="table-responsive">
-            <table>
-                <thead><tr><th>Acc No</th><th>Owner</th><th>Kindred</th><th>Sub</th><th>Phone</th><th>Action</th></tr></thead>
-                <tbody id="search-results"></tbody>
-            </table>
-        </div>
-    </div>
-
-    <div id="data" class="section">
-        <h3>Data Management</h3>
-        <div class="alert alert-success" id="drive-info">
-            Using Physical Storage. Backups are automatic every 5 minutes to the /backups folder.
-        </div>
-        
-        <div class="form-grid">
-            <div class="stat-card">
-                <h4>Manual Backup</h4>
-                <p>Force a write to the physical drive now.</p>
-                <button class="btn btn-primary" onclick="DataMgr.forceSaveToDrive()">Save & Backup Now</button>
-            </div>
-        </div>
-
-        <div class="stat-card" style="margin-top: 20px;">
-            <h4>Bulk Import Households</h4>
-            <p>Supports CSV, JSON, or Excel (.xlsx). Structure: Kindred, SubKindred, Owner, Phone.</p>
-            <input type="file" id="import-file">
-            <button class="btn btn-success" onclick="DataMgr.importFile()">Import File</button>
-        </div>
-    </div>
-
-    <div id="audit" class="section">
-        <h3>System Audit Trail</h3>
-        <p>Tracks Login, Collection, Remittance, and User Management.</p>
-        <div class="table-responsive">
-            <table>
-                <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Details</th></tr></thead>
-                <tbody id="audit-body"></tbody>
-            </table>
+            <table><thead><tr><th>Date</th><th>Kindred</th><th>Amount</th><th>User</th></tr></thead><tbody id="remit-history-body"></tbody></table>
         </div>
     </div>
 
     <div id="settings" class="section">
-        <div class="stats-container">
-            <div class="stat-card" style="border-left-color: var(--primary);">
-                <h3>User Management</h3>
-                <div id="user-mgmt-form">
-                    <div class="form-group">
-                        <label>Username</label>
-                        <input type="text" id="set-user">
-                    </div>
-                    <div class="form-group">
-                        <label>Password</label>
-                        <input type="text" id="set-pass">
-                    </div>
-                    <div class="form-group">
-                        <label>Role</label>
-                        <select id="set-role">
-                            <option value="collector">Collection Officer</option>
-                            <option value="leader">Kindred Leader</option>
-                            <option value="admin">Administrator</option>
-                        </select>
-                    </div>
-                    <button class="btn btn-primary" onclick="App.saveUser()">Save/Update User</button>
-                </div>
+        <div class="form-grid">
+            <div class="stat-card">
+                <h3>Branding</h3>
+                <label>Official Seal</label>
+                <input type="file" accept="image/*" onchange="App.handleBrandingUpload('seal', this)">
+                <div id="preview-seal" style="margin-top:10px"></div>
+                
+                <label style="margin-top:15px">Signature</label>
+                <input type="file" accept="image/*" onchange="App.handleBrandingUpload('signature', this)">
+                <div id="preview-sig" style="margin-top:10px"></div>
             </div>
-
-            <div class="stat-card" style="border-left-color: var(--accent);">
-                <h3>Official Branding</h3>
-                <p class="text-muted">Upload seal and signature for official documents.</p>
-                <div class="form-group">
-                    <label>System Seal (Stamp)</label>
-                    <input type="file" id="upload-seal" accept="image/*" onchange="App.handleBrandingUpload('seal')">
-                    <div id="preview-seal" style="margin-top:5px;"></div>
-                </div>
-                <div class="form-group">
-                    <label>Authorized Signature</label>
-                    <input type="file" id="upload-sig" accept="image/*" onchange="App.handleBrandingUpload('signature')">
-                    <div id="preview-sig" style="margin-top:5px;"></div>
-                </div>
+            <div class="stat-card">
+                <h3>User Accounts</h3>
+                <input type="text" id="set-user" placeholder="Username">
+                <input type="text" id="set-pass" placeholder="Password">
+                <select id="set-role"><option value="collector">Collector</option><option value="admin">Admin</option></select>
+                <button class="btn btn-primary btn-sm" onclick="App.saveUser()">Add User</button>
+                <div id="user-list" style="margin-top:10px"></div>
             </div>
-        </div>
-        
-        <h4>Existing Users</h4>
-        <div class="table-responsive">
-            <table>
-                <thead><tr><th>Username</th><th>Role</th><th>Action</th></tr></thead>
-                <tbody id="user-list-body"></tbody>
-            </table>
-        </div>
-    </div>
-
-    <div id="wipe" class="section">
-        <div style="border: 2px solid red; padding: 20px; background: #fff5f5;">
-            <h2 style="color: red; margin-top: 0;">⚠ DANGER ZONE</h2>
-            <p>This will permanently delete ALL data from the connected storage file.</p>
-            <input type="password" id="wipe-pass" placeholder="Superadmin Password" style="margin-bottom: 10px;">
-            <button class="btn btn-danger" onclick="App.wipeData()">WIPE SYSTEM</button>
-        </div>
-    </div>
-
-    <div id="change-password" class="section">
-        <h3>Change Password</h3>
-        <div style="max-width: 400px; margin: 0 auto;">
-            <div class="form-group">
-                <label>Current Password</label>
-                <input type="password" id="current-pass">
-            </div>
-            <div class="form-group">
-                <label>New Password</label>
-                <input type="password" id="new-pass">
-            </div>
-            <div class="form-group">
-                <label>Confirm New Password</label>
-                <input type="password" id="confirm-pass">
-            </div>
-            <button class="btn btn-primary" onclick="App.changePassword()">Update Password</button>
-            <button class="btn" onclick="Router.go('dashboard')" style="margin-left: 10px;">Cancel</button>
         </div>
     </div>
 
     <div id="statement" class="section">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h3>Statement of Account</h3>
-            <button class="btn btn-primary no-print" onclick="Printer.printStatement(currentStatement)" style="display: none;" id="print-statement-btn">Print Statement</button>
-        </div>
-        
-        <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>Account Number</label>
-                    <input type="text" id="stmt-acc" placeholder="Enter Account No" onchange="App.loadStatement(this.value)">
-                </div>
-                <div class="form-group">
-                    <label>Period</label>
-                    <select id="stmt-period">
-                        <option value="all">All Time</option>
-                        <option value="current_month">Current Month</option>
-                        <option value="last_30">Last 30 Days</option>
-                        <option value="custom">Custom</option>
-                    </select>
-                </div>
-                <div class="form-group" id="stmt-date-from-group" style="display: none;">
-                    <label>From Date</label>
-                    <input type="date" id="stmt-date-from">
-                </div>
-                <div class="form-group" id="stmt-date-to-group" style="display: none;">
-                    <label>To Date</label>
-                    <input type="date" id="stmt-date-to">
-                </div>
-            </div>
-        </div>
-        
-        <div id="statement-content">
-            <div style="text-align: center; padding: 40px; color: #999;" id="stmt-placeholder">
-                Enter an account number to view statement
-            </div>
-        </div>
+        <h3>Statement Lookup</h3>
+        <input type="text" id="stmt-acc" placeholder="Enter Account ID" onchange="App.loadStatement(this.value)">
+        <div id="statement-content" style="margin-top:20px"></div>
     </div>
 
     <div id="receipt-view" class="section">
-        <button class="btn no-print" onclick="Router.go('dashboard')">← Dashboard</button>
-        <button class="btn no-print" onclick="window.print()" style="float:right;">Print</button>
-        <br><br>
-        <div class="receipt-container" id="receipt-content">
-        </div>
+        <div class="no-print"><button class="btn" onclick="Router.go('dashboard')">Back</button> <button class="btn btn-success" onclick="window.print()">Print</button></div>
+        <div id="receipt-content" class="receipt-container"></div>
     </div>
 </div>
 
 <script>
-// Global variable for current statement
-let currentStatement = null;
+// --- CLOUD CONFIGURATION ---
+const CLOUD_CFG = {
+    API_KEY: 'AIzaSyCMaOxkZQZEKp-3_WlktsTY4SgcJaKKVkg',
+    CLIENT_ID: '309083177169-ltmc6ns4kg579tngf5m94e7hgrajv5mj.apps.googleusercontent.com',
+    SCOPES: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly",
+    DISCOVERY_DOC: "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"
+};
 
-// --- STORAGE LOGIC ---
-const FileSystem = {
-    dirHandle: null,
-    fileHandle: null,
-    isConnected: false,
-    DB_NAME: "NtuDriveStore",
+let tokenClient;
+let gapiInited = false;
+let gisInited = false;
+
+const CloudStorage = {
+    fileId: null,
     
-    initLink: async () => {
-        try {
-            const handle = await FileSystem.getStoredHandle();
-            if(handle) {
-                document.getElementById('storage-msg').innerText = "Found previous link: " + handle.name;
-                document.getElementById('btn-connect-drive').innerText = "⚡ Verify OneDrive Link";
-                document.getElementById('history-hint').innerText = "Click verify to re-enable sync.";
-                
-                setTimeout(async () => {
-                    try {
-                        const opt = { mode: 'readwrite' };
-                        if (await handle.queryPermission(opt) === 'granted') {
-                            FileSystem.dirHandle = handle;
-                            FileSystem.fileHandle = await FileSystem.dirHandle.getFileHandle('database.json', { create: true });
-                            FileSystem.isConnected = true;
-                            document.getElementById('status-dot').classList.add('active');
-                            document.getElementById('status-text').innerText = "OneDrive Active (" + FileSystem.dirHandle.name + ")";
-                            document.getElementById('storage-msg').innerText = "✅ Auto-synced: " + FileSystem.dirHandle.name;
-                            document.getElementById('storage-msg').style.color = "var(--storage-ok)";
-                            
-                            await DataMgr.loadFromDrive();
-                            setInterval(DataMgr.autoBackup, 300000);
-                        }
-                    } catch(e) {}
-                }, 500);
-            } else {
-                document.getElementById('storage-msg').innerText = "Not Connected";
-            }
-        } catch(e) {}
-    },
-
-    storeHandle: async (handle) => {
-        const db = await FileSystem.openDB();
-        const tx = db.transaction("handles", "readwrite");
-        tx.objectStore("handles").put(handle, "lastFolder");
-    },
-
-    getStoredHandle: async () => {
-        const db = await FileSystem.openDB();
-        return new Promise((resolve) => {
-            const req = db.transaction("handles").objectStore("handles").get("lastFolder");
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => resolve(null);
+    init: async () => {
+        gapi.load('client', async () => {
+            await gapi.client.init({ apiKey: CLOUD_CFG.API_KEY, discoveryDocs: [CLOUD_CFG.DISCOVERY_DOC] });
+            gapiInited = true;
+            CloudStorage.tryAutoLogin();
         });
+
+        tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: CLOUD_CFG.CLIENT_ID,
+            scope: CLOUD_CFG.SCOPES,
+            callback: (resp) => CloudStorage.handleAuthResponse(resp),
+        });
+        gisInited = true;
     },
 
-    openDB: () => {
-        return new Promise((resolve, reject) => {
-            const req = indexedDB.open(FileSystem.DB_NAME, 1);
-            req.onupgradeneeded = () => req.result.createObjectStore("handles");
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
+    tryAutoLogin: () => {
+        const token = localStorage.getItem('gdrive_token');
+        if (token) {
+            gapi.client.setToken({ access_token: token });
+            CloudStorage.connect();
+        }
+    },
+
+    initiateAuth: () => {
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+    },
+
+    handleAuthResponse: async (resp) => {
+        if (resp.error) return;
+        localStorage.setItem('gdrive_token', resp.access_token);
+        await CloudStorage.connect();
     },
 
     connect: async () => {
+        document.getElementById('storage-msg').innerText = "☁ Linking Drive...";
         try {
-            let handle = await window.showDirectoryPicker();
-            FileSystem.dirHandle = handle;
-            await FileSystem.storeHandle(handle);
-            FileSystem.fileHandle = await FileSystem.dirHandle.getFileHandle('database.json', { create: true });
-            await FileSystem.dirHandle.getDirectoryHandle('backups', { create: true });
-            FileSystem.isConnected = true;
+            // Find the database file
+            const list = await gapi.client.drive.files.list({
+                q: "name = 'ntu_database.json' and trashed = false",
+                fields: "files(id, name)"
+            });
+
+            if (list.result.files.length > 0) {
+                CloudStorage.fileId = list.result.files[0].id;
+                await DataMgr.loadFromCloud();
+            } else {
+                // Create if not exists
+                const resp = await gapi.client.drive.files.create({
+                    resource: { name: 'ntu_database.json', mimeType: 'application/json' },
+                    fields: 'id'
+                });
+                CloudStorage.fileId = resp.result.id;
+                await DataMgr.save(); // Save default structure
+            }
+
             document.getElementById('status-dot').classList.add('active');
-            document.getElementById('status-text').innerText = "OneDrive Active (" + FileSystem.dirHandle.name + ")";
-            document.getElementById('storage-msg').innerText = "✅ Synced: " + FileSystem.dirHandle.name;
+            document.getElementById('status-text').innerText = "Cloud Active";
+            document.getElementById('storage-msg').innerText = "✅ Cloud Connected";
             document.getElementById('storage-msg').style.color = "var(--storage-ok)";
-            await DataMgr.loadFromDrive();
-            setInterval(DataMgr.autoBackup, 300000); 
-        } catch (err) {}
+            document.getElementById('btn-login-submit').disabled = false;
+            document.getElementById('btn-login-submit').innerText = "Access System";
+        } catch (e) {
+            console.error(e);
+            document.getElementById('storage-msg').innerText = "❌ Sync Error";
+        }
     }
 };
 
-// --- DATABASE MANAGER ---
+// --- DATA MANAGER ---
 const DataMgr = {
     data: {
-        users: [
-            { user: 'Superadmin', pass: 'supro123', role: 'superadmin' },
-            { user: 'Admin', pass: 'admin123', role: 'admin' }
-        ],
+        users: [{user:'Admin', pass:'admin123', role:'admin'}],
         households: [],
-        ledgers: {
-            'Oduebo': { debt: 0, remitted: 0 },
-            'Oparadim': { debt: 0, remitted: 0 },
-            'Ezealaoma': { debt: 0, remitted: 0 }
-        },
         transactions: [],
         remittances: [],
-        audit: [],
-        branding: { seal: '', signature: '' }
+        ledgers: {Oduebo:{debt:0, remitted:0}, Oparadim:{debt:0, remitted:0}, Ezealaoma:{debt:0, remitted:0}},
+        branding: {seal:'', signature:''},
+        audit: []
     },
 
     save: async () => {
-        if(FileSystem.isConnected) {
-            document.getElementById('autosave-indicator').style.display = 'block';
-            try {
-                const writable = await FileSystem.fileHandle.createWritable();
-                await writable.write(JSON.stringify(DataMgr.data, null, 2));
-                await writable.close();
-                setTimeout(() => document.getElementById('autosave-indicator').style.display = 'none', 1000);
-            } catch(e) {}
-        } else {
-            localStorage.setItem('ntu_db_v3', JSON.stringify(DataMgr.data));
-        }
-    },
-
-    loadFromDrive: async () => {
-        if(!FileSystem.isConnected) return;
+        if (!CloudStorage.fileId) return;
+        document.getElementById('autosave-indicator').style.display = 'block';
         try {
-            const file = await FileSystem.fileHandle.getFile();
-            const text = await file.text();
-            if(text) {
-                DataMgr.data = JSON.parse(text);
-                if(!DataMgr.data.branding) DataMgr.data.branding = { seal: '', signature: '' };
-                if(Auth.user) Router.init(); 
-                App.updateBrandingPreviews();
-            }
-        } catch(e) {
-            DataMgr.save(); 
+            await gapi.client.request({
+                path: '/upload/drive/v3/files/' + CloudStorage.fileId,
+                method: 'PATCH',
+                params: { uploadType: 'media' },
+                body: JSON.stringify(DataMgr.data)
+            });
+            setTimeout(() => document.getElementById('autosave-indicator').style.display = 'none', 1000);
+        } catch (e) {}
+    },
+
+    loadFromCloud: async () => {
+        const resp = await gapi.client.drive.files.get({ fileId: CloudStorage.fileId, alt: 'media' });
+        if (resp.result) {
+            DataMgr.data = resp.result;
+            App.updateBrandingPreviews();
         }
-    },
-
-    init: () => {
-        const local = localStorage.getItem('ntu_db_v3');
-        if(local) {
-            DataMgr.data = JSON.parse(local);
-            if(!DataMgr.data.branding) DataMgr.data.branding = { seal: '', signature: '' };
-        }
-        FileSystem.initLink();
-    },
-
-    forceSaveToDrive: async () => {
-        await DataMgr.save();
-        await DataMgr.autoBackup();
-        UI.globalAlert("Synced to OneDrive.", "success");
-    },
-
-    autoBackup: async () => {
-        if(!FileSystem.isConnected) return;
-        try {
-            const backupDir = await FileSystem.dirHandle.getDirectoryHandle('backups');
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const filename = `backup_${timestamp}.json`;
-            const fileHandle = await backupDir.getFileHandle(filename, { create: true });
-            const writable = await fileHandle.createWritable();
-            await writable.write(JSON.stringify(DataMgr.data, null, 2));
-            await writable.close();
-        } catch(e) {}
-    },
-
-    log: (action, details) => {
-        DataMgr.data.audit.unshift({
-            time: new Date().toLocaleString(),
-            user: Auth.user ? Auth.user.user : 'System',
-            action: action,
-            details: details
-        });
-        DataMgr.save();
-    },
-
-    importFile: () => {
-        const file = document.getElementById('import-file').files[0];
-        if(!file) return alert('Select file');
-        const ext = file.name.split('.').pop().toLowerCase();
-        const reader = new FileReader();
-        
-        if(ext === 'json') {
-            reader.onload = (e) => DataMgr.processImportData(JSON.parse(e.target.result));
-            reader.readAsText(file);
-        } else if (ext === 'csv') {
-            reader.onload = (e) => {
-                const lines = e.target.result.split('\n');
-                const data = [];
-                for(let i=1; i<lines.length; i++) {
-                    const c = lines[i].split(',');
-                    if(c.length >= 4) data.push({Kindred:c[0], Sub:c[1], Owner:c[2], Phone:c[3]});
-                }
-                DataMgr.processImportData(data);
-            };
-            reader.readAsText(file);
-        } else if (ext === 'xlsx' || ext === 'xls') {
-            reader.onload = (e) => {
-                const wb = XLSX.read(e.target.result, {type: 'binary'});
-                const sheet = wb.Sheets[wb.SheetNames[0]];
-                const data = XLSX.utils.sheet_to_json(sheet);
-                DataMgr.processImportData(data);
-            };
-            reader.readAsBinaryString(file);
-        }
-    },
-
-    processImportData: (data) => {
-        let count = 0;
-        data.forEach(row => {
-            const k = row.Kindred || row.kindred;
-            const s = row.Sub || row.SubKindred || row.sub;
-            const o = row.Owner || row.Name || row.owner;
-            const p = row.Phone || row.phone;
-            if(k && s && o && p) {
-                const pStr = String(p);
-                const id = App.generateID(k, s, o, pStr);
-                if(!DataMgr.data.households.find(h => h.id === id)) {
-                    DataMgr.data.households.push({ id, kindred: k, sub: s, owner: o, phone: pStr, date: new Date().toISOString() });
-                    count++;
-                }
-            }
-        });
-        DataMgr.save();
-        DataMgr.log('IMPORT', `Imported ${count} households`);
-        alert(`Successfully imported ${count} households.`);
-        Router.go('dashboard');
     }
 };
 
-// --- AUTHENTICATION ---
+// --- AUTH ---
 const Auth = {
     user: null,
     login: () => {
         const u = document.getElementById('login-user').value;
         const p = document.getElementById('login-pass').value;
-        const users = DataMgr.data.users;
-        const found = users.find(x => x.user.toLowerCase() === u.toLowerCase() && x.pass === p);
-        if(found) {
+        const found = DataMgr.data.users.find(x => x.user === u && x.pass === p);
+        if (found) {
             Auth.user = found;
             document.getElementById('view-login').classList.add('hidden');
             document.getElementById('view-app').classList.remove('hidden');
-            DataMgr.log('LOGIN', 'User logged in');
             Router.init();
-        } else { UI.alert('login-alert', 'Invalid credentials', 'error'); }
+        } else {
+            UI.alert('login-alert', 'Invalid credentials', 'error');
+        }
     },
-    logout: () => { DataMgr.log('LOGOUT', 'User logged out'); location.reload(); }
-};
-
-// --- ROUTER ---
-const Router = {
-    init: () => {
-        const role = Auth.user.role;
-        document.getElementById('user-role-display').innerHTML = `Logged in: <strong>${Auth.user.user}</strong> <span class="badge badge-${role}">${role.toUpperCase()}</span>`;
-        document.getElementById('admin-menu').classList.add('hidden');
-        document.getElementById('field-menu').classList.add('hidden');
-        if(role === 'collector' || role === 'leader') document.getElementById('field-menu').classList.remove('hidden');
-        if(role === 'admin' || role === 'superadmin') document.getElementById('admin-menu').classList.remove('hidden');
-        if(role === 'superadmin') { document.getElementById('nav-audit').classList.remove('hidden'); document.getElementById('nav-wipe').classList.remove('hidden'); }
-        Router.go('dashboard');
-    },
-    go: (pageId) => {
-        document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
-        const target = document.getElementById(pageId);
-        const btn = document.getElementById('nav-'+pageId);
-        if(target) target.classList.add('active');
-        if(btn) btn.classList.add('active');
-        if(pageId === 'dashboard') App.loadDashboard();
-        if(pageId === 'settings') App.loadUsers();
-    }
+    logout: () => { location.reload(); }
 };
 
 // --- APP LOGIC ---
 const App = {
-    generateID: (kindred, sub, owner, phone) => {
-        const p1 = kindred.substring(0, 2).toUpperCase().padEnd(2,'X');
-        const p2 = sub.substring(0, 2).toUpperCase().padEnd(2,'X');
-        const p3 = owner.substring(0, 2).toUpperCase().padEnd(2,'X');
-        const p4 = phone.slice(-2);
-        return p1 + p2 + p3 + p4;
-    },
+    generateID: (k, s, o, p) => (k.slice(0,2)+s.slice(0,2)+o.slice(0,2)+p.slice(-2)).toUpperCase(),
 
     registerHousehold: () => {
         const k = document.getElementById('reg-kindred').value;
         const s = document.getElementById('reg-sub').value;
         const o = document.getElementById('reg-owner').value;
         const p = document.getElementById('reg-phone').value;
-        if(!s || !o || !p) return UI.globalAlert('Fill all fields', 'error');
         const id = App.generateID(k, s, o, p);
-        if(DataMgr.data.households.find(h => h.id === id)) return UI.globalAlert('Account Exists: ' + id, 'error');
-        DataMgr.data.households.push({ id, kindred: k, sub: s, owner: o, phone: p, date: new Date().toISOString() });
-        DataMgr.log('REGISTER', `New Household: ${id}`);
+        DataMgr.data.households.push({id, kindred:k, sub:s, owner:o, phone:p});
         DataMgr.save();
-        alert('Registered! ID: ' + id);
+        alert("Registered! ID: " + id);
+        Router.go('dashboard');
     },
 
     processCollection: () => {
         const id = document.getElementById('pay-acc').value;
         const amt = parseFloat(document.getElementById('pay-amt').value);
         const house = DataMgr.data.households.find(h => h.id === id);
-        if(!house) return UI.globalAlert('Invalid Account', 'error');
-        const tx = { 
-            ref: 'TX' + Date.now().toString().slice(-6), 
-            acc: id, kindred: house.kindred, sub: house.sub, 
-            owner: house.owner, phone: house.phone, amount: amt, 
-            date: document.getElementById('pay-date').value, 
-            particulars: document.getElementById('pay-part').value, by: Auth.user.user 
-        };
+        if (!house) return alert("Invalid Account");
+        const tx = { acc:id, owner:house.owner, amount:amt, date:document.getElementById('pay-date').value, ref:'TX'+Date.now() };
         DataMgr.data.transactions.push(tx);
-        DataMgr.log('COLLECTION', `Received ${amt} from ${id}`);
         DataMgr.save();
-        Printer.printCollection(tx);
+        Printer.printCollection(tx, house);
     },
 
-    loadDashboard: () => {
-        const txs = DataMgr.data.transactions;
-        const l = DataMgr.data.ledgers;
-        document.getElementById('dash-households').innerText = DataMgr.data.households.length;
-        let tableHtml = '';
-        for(let k in l) {
-            const coll = txs.filter(t => t.kindred === k).reduce((s,t) => s + t.amount, 0);
-            tableHtml += `<tr><td>${k}</td><td>₦${l[k].debt.toFixed(2)}</td><td>₦${coll.toFixed(2)}</td><td>₦${l[k].remitted.toFixed(2)}</td><td>₦${(l[k].debt - l[k].remitted).toFixed(2)}</td></tr>`;
-        }
-        document.getElementById('dash-table-body').innerHTML = tableHtml;
-    },
-
-    handleBrandingUpload: (type) => {
-        const file = document.getElementById(type === 'seal' ? 'upload-seal' : 'upload-sig').files[0];
+    handleBrandingUpload: (type, input) => {
         const reader = new FileReader();
         reader.onload = (e) => {
             DataMgr.data.branding[type] = e.target.result;
             DataMgr.save();
             App.updateBrandingPreviews();
         };
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(input.files[0]);
     },
 
     updateBrandingPreviews: () => {
         const b = DataMgr.data.branding;
-        if(b.seal) document.getElementById('preview-seal').innerHTML = `<img src="${b.seal}" style="height:50px;">`;
-        if(b.signature) document.getElementById('preview-sig').innerHTML = `<img src="${b.signature}" style="height:40px;">`;
+        if(b.seal) document.getElementById('preview-seal').innerHTML = `<img src="${b.seal}" height="50">`;
+        if(b.signature) document.getElementById('preview-sig').innerHTML = `<img src="${b.signature}" height="30">`;
     },
 
-    loadUsers: () => {
+    loadDashboard: () => {
+        document.getElementById('dash-households').innerText = DataMgr.data.households.length;
+        const total = DataMgr.data.transactions.reduce((s,t) => s+t.amount, 0);
+        document.getElementById('dash-collected').innerText = "₦" + total.toFixed(2);
+        
         let html = '';
-        DataMgr.data.users.forEach(u => html += `<tr><td>${u.user}</td><td>${u.role}</td><td>-</td></tr>`);
-        document.getElementById('user-list-body').innerHTML = html;
-        App.updateBrandingPreviews();
+        ['Oduebo', 'Oparadim', 'Ezealaoma'].forEach(k => {
+            const l = DataMgr.data.ledgers[k];
+            html += `<tr><td>${k}</td><td>₦${l.debt}</td><td>-</td><td>₦${l.remitted}</td><td>₦${l.debt-l.remitted}</td></tr>`;
+        });
+        document.getElementById('dash-table-body').innerHTML = html;
+    }
+};
+
+// --- ROUTER ---
+const Router = {
+    init: () => {
+        const r = Auth.user.role;
+        document.getElementById('user-role-display').innerText = `Logged in as: ${Auth.user.user} (${r})`;
+        if(r === 'admin') {
+            document.getElementById('admin-menu').classList.remove('hidden');
+            document.getElementById('field-menu').classList.remove('hidden');
+        } else {
+            document.getElementById('field-menu').classList.remove('hidden');
+        }
+        Router.go('dashboard');
+    },
+    go: (id) => {
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if(id === 'dashboard') App.loadDashboard();
     }
 };
 
 // --- PRINTER ---
 const Printer = {
-    render: (html) => {
-        document.getElementById('receipt-content').innerHTML = html;
-        Router.go('receipt-view');
-    },
-    printCollection: (tx) => {
+    printCollection: (tx, house) => {
         const b = DataMgr.data.branding;
         const seal = b.seal ? `<img src="${b.seal}" class="branding-seal">` : '';
-        const sig = b.signature ? `<img src="${b.signature}" class="branding-sig">` : '<br>___________';
-        Printer.render(`
+        const sig = b.signature ? `<img src="${b.signature}" class="branding-sig">` : '<br>______';
+        document.getElementById('receipt-content').innerHTML = `
             ${seal}
-            <div style="text-align: center;"><h3>NTU ELECTRICITY RECEIPT</h3></div>
-            <hr>
-            <p><strong>Account ID:</strong> ${tx.acc}</p>
+            <h3 style="text-align:center">NTU ELECTRICITY RECEIPT</h3>
+            <p><strong>Account:</strong> ${tx.acc} (${house.kindred})</p>
             <p><strong>Owner:</strong> ${tx.owner}</p>
-            <p><strong>Phone:</strong> ${tx.phone}</p>
-            <p><strong>Kindred:</strong> ${tx.kindred}</p>
-            <p><strong>Sub-Kindred:</strong> ${tx.sub}</p>
             <hr>
-            <h3 style="text-align: right;">₦${tx.amount.toFixed(2)}</h3>
-            <div style="margin-top: 20px;">${sig}<p style="font-size: 10px;">Authorization</p></div>
-        `);
+            <h2 style="text-align:right">₦${tx.amount.toFixed(2)}</h2>
+            <p>Date: ${tx.date}</p>
+            <div style="margin-top:20px">${sig}<br><small>Authorized Officer</small></div>
+        `;
+        Router.go('receipt-view');
     }
 };
 
 const UI = {
     alert: (id, msg, type) => {
         const el = document.getElementById(id);
-        el.innerText = msg;
-        el.className = `alert alert-${type}`;
-        el.style.display = 'block';
+        el.innerText = msg; el.className = `alert alert-${type}`; el.style.display = 'block';
         setTimeout(() => el.style.display = 'none', 3000);
-    },
-    globalAlert: (msg, type) => UI.alert('global-alert', msg, type)
+    }
 };
 
-DataMgr.init();
+window.onload = CloudStorage.init;
 </script>
 </body>
 </html>
