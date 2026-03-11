@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ntu Electricity Management System v4.1 (Custom Billing Formula)</title>
+    <title>Ntu Electricity Management System v4.2 (Public Statements)</title>
     <!-- Firebase SDK (compat version) -->
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
@@ -99,15 +99,22 @@
         .badge-collector { background: #27ae60; }
         
         .text-muted { color: #7f8c8d; }
+
+        /* Tabs on login page */
+        .login-tabs { display: flex; border-bottom: 2px solid #ddd; margin-bottom: 20px; }
+        .login-tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; background: #f5f5f5; border: 1px solid #ddd; border-bottom: none; }
+        .login-tab.active { background: white; font-weight: bold; border-top: 2px solid var(--secondary); }
+        .login-tab-content { display: none; }
+        .login-tab-content.active { display: block; }
     </style>
 </head>
 <body>
 
-<!-- LOGIN VIEW -->
+<!-- LOGIN + PUBLIC STATEMENT VIEW -->
 <div id="view-login" class="container" style="max-width: 400px; margin-top: 60px; padding: 20px;">
     <div style="text-align: center; margin-bottom: 20px;">
-        <h2 style="color: var(--primary);">Ntu Electricity System v4.1</h2>
-        <p>Custom Billing Formula</p>
+        <h2 style="color: var(--primary);">Ntu Electricity System v4.2</h2>
+        <p>Public Statement Lookup</p>
     </div>
     
     <div style="background: #eef2f7; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center;">
@@ -116,21 +123,45 @@
         <div id="history-hint" style="font-size: 10px; color: #777; margin-top: 5px;">Data is synced to the cloud automatically.</div>
     </div>
 
-    <div id="login-alert" class="alert"></div>
-    <form onsubmit="event.preventDefault(); Auth.login();">
+    <!-- Tabs: Login | Household Statement -->
+    <div class="login-tabs">
+        <div class="login-tab active" onclick="switchLoginTab('login')">Staff Login</div>
+        <div class="login-tab" onclick="switchLoginTab('public')">Household Statement</div>
+    </div>
+
+    <!-- Staff Login Tab -->
+    <div id="login-tab-content" class="login-tab-content active">
+        <div id="login-alert" class="alert"></div>
+        <form onsubmit="event.preventDefault(); Auth.login();">
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="login-user" required>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="login-pass" required>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Access System</button>
+        </form>
+    </div>
+
+    <!-- Public Statement Tab -->
+    <div id="public-tab-content" class="login-tab-content">
+        <h3 style="margin-top: 0;">View Your Household Statement</h3>
+        <p>Enter your 8‑character account number below.</p>
         <div class="form-group">
-            <label>Username</label>
-            <input type="text" id="login-user" required>
+            <label>Account Number</label>
+            <input type="text" id="public-account" placeholder="e.g. ODUMJO55" maxlength="8">
         </div>
-        <div class="form-group">
-            <label>Password</label>
-            <input type="password" id="login-pass" required>
+        <button class="btn btn-primary" style="width: 100%;" onclick="Public.loadStatement()">View Statement</button>
+        <div id="public-statement-container" style="margin-top: 20px;"></div>
+        <div style="margin-top: 10px; text-align: center;">
+            <button class="btn btn-sm btn-info no-print" onclick="Public.printStatement()" id="public-print-btn" style="display: none;">Print Statement</button>
         </div>
-        <button type="submit" class="btn btn-primary" style="width: 100%;">Access System</button>
-    </form>
+    </div>
 </div>
 
-<!-- MAIN APP VIEW -->
+<!-- MAIN APP VIEW (staff only) -->
 <div id="view-app" class="container hidden">
     <div class="header">
         <div>
@@ -480,7 +511,7 @@
         </div>
     </div>
 
-    <!-- STATEMENT -->
+    <!-- STATEMENT (internal) -->
     <div id="statement" class="section">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <h3>Statement of Account</h3>
@@ -548,7 +579,7 @@ const db = firebase.firestore();
 db.enablePersistence()
     .catch(err => console.warn("Firebase persistence error:", err));
 
-// Global variable for current statement
+// Global variable for current statement (internal)
 let currentStatement = null;
 
 // ==================== DATABASE MANAGER (Firebase) ====================
@@ -776,6 +807,133 @@ const Auth = {
     logout: () => {
         DataMgr.log('LOGOUT', 'User logged out');
         location.reload();
+    }
+};
+
+// ==================== PUBLIC STATEMENT LOOKUP ====================
+const Public = {
+    // Store the current statement data for printing
+    currentStatement: null,
+
+    loadStatement: () => {
+        const accountNo = document.getElementById('public-account').value.trim().toUpperCase();
+        if (!accountNo) {
+            alert('Please enter an account number.');
+            return;
+        }
+
+        const house = DataMgr.data.households.find(h => h.id === accountNo);
+        if (!house) {
+            document.getElementById('public-statement-container').innerHTML = `
+                <div style="text-align: center; padding: 20px; color: #c0392b; border: 1px solid #f5c6cb; background: #f8d7da;">
+                    ❌ Account not found: ${accountNo}
+                </div>`;
+            document.getElementById('public-print-btn').style.display = 'none';
+            return;
+        }
+
+        // Get all transactions for this account
+        let filteredTxs = DataMgr.data.transactions.filter(t => t.acc === accountNo);
+        // Sort by date descending
+        filteredTxs.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        const totalPaid = filteredTxs.reduce((sum, t) => sum + t.amount, 0);
+        const kindredLedger = DataMgr.data.ledgers[house.kindred] || { debt: 0, remitted: 0 };
+
+        let txsHtml = '';
+        filteredTxs.forEach(tx => {
+            txsHtml += `
+                <tr>
+                    <td>${tx.date}</td>
+                    <td>${tx.ref}</td>
+                    <td>${tx.particulars || '—'}</td>
+                    <td style="text-align: right;">₦${tx.amount.toFixed(2)}</td>
+                </tr>`;
+        });
+        if (filteredTxs.length === 0) {
+            txsHtml = `<tr><td colspan="4" style="text-align: center; color: #999;">No transactions found</td></tr>`;
+        }
+
+        const statementHtml = `
+            <div style="border: 1px solid #ccc; padding: 20px; background: white; border-radius: 8px; margin-top: 20px;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0;">NTU ELECTRICITY</h2>
+                    <h3 style="margin: 5px 0;">HOUSEHOLD STATEMENT</h3>
+                    <p style="margin: 0; font-size: 12px;">Generated on ${new Date().toLocaleDateString()}</p>
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 250px;">
+                        <p><strong>Account No:</strong> ${house.id}</p>
+                        <p><strong>Name:</strong> ${house.owner}</p>
+                        <p><strong>Kindred:</strong> ${house.kindred} (${house.sub})</p>
+                        <p><strong>Phone:</strong> ${house.phone}</p>
+                    </div>
+                    <div style="flex: 1; min-width: 250px; text-align: right;">
+                        <p><strong>Account Created:</strong> ${new Date(house.date).toLocaleDateString()}</p>
+                    </div>
+                </div>
+                
+                <hr style="border-top: 1px solid #000;">
+                
+                <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="border: 1px solid #ddd; padding: 8px;">Date</th>
+                            <th style="border: 1px solid #ddd; padding: 8px;">Ref No</th>
+                            <th style="border: 1px solid #ddd; padding: 8px;">Particulars</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Amount (₦)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${txsHtml}
+                    </tbody>
+                </table>
+                
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-top: 20px;">
+                    <h4 style="margin: 0 0 10px 0;">SUMMARY</h4>
+                    <div style="display: flex; justify-content: space-between; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 200px;">
+                            <p><strong>Total Amount Paid:</strong></p>
+                            <p><strong>Kindred Allocation:</strong></p>
+                            <p><strong>Kindred Remitted:</strong></p>
+                            <p style="color: var(--accent);"><strong>Account Status:</strong></p>
+                        </div>
+                        <div style="flex: 1; min-width: 200px; text-align: right;">
+                            <p><strong>₦${totalPaid.toFixed(2)}</strong></p>
+                            <p>₦${kindredLedger.debt.toFixed(2)}</p>
+                            <p>₦${kindredLedger.remitted.toFixed(2)}</p>
+                            <p style="color: var(--accent);"><strong>ACTIVE</strong></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 20px; font-size: 11px; color: #777; text-align: center;">
+                    <p>This is a computer-generated statement. No signature required.</p>
+                    <p>For inquiries, contact your Kindred Leader or Administration.</p>
+                </div>
+            </div>`;
+
+        document.getElementById('public-statement-container').innerHTML = statementHtml;
+        document.getElementById('public-print-btn').style.display = 'inline-block';
+
+        // Save for printing
+        Public.currentStatement = {
+            account: house,
+            transactions: filteredTxs,
+            totalPaid: totalPaid,
+            kindredLedger: kindredLedger,
+            generatedDate: new Date().toLocaleDateString()
+        };
+    },
+
+    printStatement: () => {
+        if (!Public.currentStatement) {
+            alert('No statement loaded to print.');
+            return;
+        }
+        // Reuse the printer's statement printer but with public data
+        Printer.printStatement(Public.currentStatement);
     }
 };
 
@@ -1478,7 +1636,7 @@ const Printer = {
             <p><strong>Name:</strong> ${stmtData.account.owner}</p>
             <p><strong>Kindred:</strong> ${stmtData.account.kindred} (${stmtData.account.sub})</p>
             <p><strong>Phone:</strong> ${stmtData.account.phone}</p>
-            <p><strong>Period:</strong> ${stmtData.period === 'all' ? 'All Time' : stmtData.period}</p>
+            <p><strong>Period:</strong> All Time</p>
             <hr style="border-top: 1px dashed #000;">
             <table style="width: 100%; border-collapse: collapse;">
                 <thead>
@@ -1522,6 +1680,24 @@ const UI = {
     },
     globalAlert: (msg, type) => UI.alert('global-alert', msg, type)
 };
+
+// ==================== LOGIN TAB SWITCHING ====================
+function switchLoginTab(tab) {
+    const tabs = document.querySelectorAll('.login-tab');
+    const contents = document.querySelectorAll('.login-tab-content');
+    tabs.forEach(t => t.classList.remove('active'));
+    contents.forEach(c => c.classList.remove('active'));
+    if (tab === 'login') {
+        tabs[0].classList.add('active');
+        document.getElementById('login-tab-content').classList.add('active');
+    } else {
+        tabs[1].classList.add('active');
+        document.getElementById('public-tab-content').classList.add('active');
+        // Clear any previous statement
+        document.getElementById('public-statement-container').innerHTML = '';
+        document.getElementById('public-print-btn').style.display = 'none';
+    }
+}
 
 // Initialize Firebase listeners and create default Superadmin if needed
 DataMgr.init();
