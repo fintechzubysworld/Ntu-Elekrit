@@ -542,27 +542,34 @@ const DataMgr = {
 
     // Initialize listeners to sync data from Firestore
     init: async () => {
+        // Update connection status initially
+        document.getElementById('storage-msg').innerText = 'Connecting to Firebase...';
+        
         // Load users
         db.collection("users").onSnapshot(snapshot => {
             DataMgr.data.users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            console.log("Users loaded:", DataMgr.data.users.length);
+        }, error => {
+            console.error("Users listener error:", error);
+            document.getElementById('storage-msg').innerText = '❌ Cannot access users collection. Check Firestore rules.';
         });
 
         db.collection("households").onSnapshot(snapshot => {
             DataMgr.data.households = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             if (Auth.user) App.loadDashboard(); // refresh dashboard if logged in
-        });
+        }, error => console.error("Households listener error:", error));
 
         db.collection("transactions").onSnapshot(snapshot => {
             DataMgr.data.transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        });
+        }, error => console.error("Transactions listener error:", error));
 
         db.collection("remittances").onSnapshot(snapshot => {
             DataMgr.data.remittances = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        });
+        }, error => console.error("Remittances listener error:", error));
 
         db.collection("audit").onSnapshot(snapshot => {
             DataMgr.data.audit = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        });
+        }, error => console.error("Audit listener error:", error));
 
         // Ledgers as a single document
         db.collection("metadata").doc("ledgers").onSnapshot(doc => {
@@ -570,31 +577,46 @@ const DataMgr = {
                 DataMgr.data.ledgers = doc.data();
             } else {
                 // Initialize if not exists
-                db.collection("metadata").doc("ledgers").set(DataMgr.data.ledgers);
+                db.collection("metadata").doc("ledgers").set(DataMgr.data.ledgers)
+                    .then(() => console.log("Ledgers document created"))
+                    .catch(err => console.warn("Could not create ledgers document:", err));
             }
-        });
+        }, error => console.error("Ledgers listener error:", error));
 
-        // --- CREATE DEFAULT SUPERADMIN IF NO USERS EXIST ---
-        const usersSnapshot = await db.collection("users").limit(1).get();
-        if (usersSnapshot.empty) {
-            await db.collection("users").add({
-                user: "Superadmin",
-                pass: "supro123",
-                role: "superadmin"
-            });
-            console.log("Default Superadmin user created.");
+        // --- CREATE DEFAULT SUPERADMIN IF NO USERS EXIST (with error handling) ---
+        try {
+            const usersSnapshot = await db.collection("users").limit(1).get();
+            if (usersSnapshot.empty) {
+                console.log("No users found – creating default Superadmin.");
+                await db.collection("users").add({
+                    user: "Superadmin",
+                    pass: "supro123",
+                    role: "superadmin"
+                });
+                console.log("Default Superadmin user created.");
+            } else {
+                console.log("Users already exist.");
+            }
+        } catch (error) {
+            console.warn("Could not check/create default user – permission error?", error);
+            document.getElementById('storage-msg').innerText = '⚠️ Cannot verify users – adjust Firestore rules.';
         }
 
-        // Update connection status
-        firebase.firestore().enableNetwork().then(() => {
-            document.getElementById('status-dot').classList.add('active');
-            document.getElementById('status-text').innerText = 'Firebase: Connected';
-            document.getElementById('storage-msg').innerText = '✅ Connected to Firebase';
-            document.getElementById('storage-msg').style.color = '#27ae60';
-        }).catch(() => {
-            document.getElementById('status-dot').classList.remove('active');
-            document.getElementById('status-text').innerText = 'Firebase: Offline';
-        });
+        // Update connection status using enableNetwork
+        firebase.firestore().enableNetwork()
+            .then(() => {
+                document.getElementById('status-dot').classList.add('active');
+                document.getElementById('status-text').innerText = 'Firebase: Connected';
+                document.getElementById('storage-msg').innerText = '✅ Connected to Firebase';
+                document.getElementById('storage-msg').style.color = '#27ae60';
+            })
+            .catch((error) => {
+                console.warn("Network enable failed:", error);
+                document.getElementById('status-dot').classList.remove('active');
+                document.getElementById('status-text').innerText = 'Firebase: Offline';
+                document.getElementById('storage-msg').innerText = '❌ Cannot reach Firebase – check network/rules';
+                document.getElementById('storage-msg').style.color = '#c0392b';
+            });
 
         window.addEventListener('online', () => {
             firebase.firestore().enableNetwork();
@@ -615,7 +637,11 @@ const DataMgr = {
             action: action,
             details: details
         };
-        await db.collection("audit").add(entry);
+        try {
+            await db.collection("audit").add(entry);
+        } catch (e) {
+            console.warn("Audit log failed:", e);
+        }
     },
 
     // Force save (not needed with Firestore auto-sync)
@@ -690,16 +716,21 @@ const Auth = {
     login: async () => {
         const u = document.getElementById('login-user').value;
         const p = document.getElementById('login-pass').value;
-        const querySnapshot = await db.collection("users").where("user", "==", u).where("pass", "==", p).get();
-        if (!querySnapshot.empty) {
-            const userDoc = querySnapshot.docs[0];
-            Auth.user = { id: userDoc.id, ...userDoc.data() };
-            document.getElementById('view-login').classList.add('hidden');
-            document.getElementById('view-app').classList.remove('hidden');
-            DataMgr.log('LOGIN', 'User logged in');
-            Router.init();
-        } else {
-            UI.alert('login-alert', 'Invalid credentials', 'error');
+        try {
+            const querySnapshot = await db.collection("users").where("user", "==", u).where("pass", "==", p).get();
+            if (!querySnapshot.empty) {
+                const userDoc = querySnapshot.docs[0];
+                Auth.user = { id: userDoc.id, ...userDoc.data() };
+                document.getElementById('view-login').classList.add('hidden');
+                document.getElementById('view-app').classList.remove('hidden');
+                DataMgr.log('LOGIN', 'User logged in');
+                Router.init();
+            } else {
+                UI.alert('login-alert', 'Invalid credentials', 'error');
+            }
+        } catch (error) {
+            console.error("Login query failed:", error);
+            UI.alert('login-alert', 'Login failed – check Firestore rules', 'error');
         }
     },
     logout: () => {
@@ -805,14 +836,17 @@ const App = {
         if(DataMgr.data.households.find(h => h.id === id)) return UI.globalAlert('Account Exists: ' + id, 'error');
 
         const newHouse = { id, kindred: k, sub: s, owner: o, phone: p, date: new Date().toISOString() };
-        await db.collection("households").doc(id).set(newHouse);
-        DataMgr.log('REGISTER', `New Household: ${id}`);
-        
-        if(confirm(`Registered! Account: ${id}. Print Slip?`)) {
-            Printer.printRegistration(newHouse);
-        } else {
-            document.getElementById('reg-owner').value = '';
-            document.getElementById('reg-phone').value = '';
+        try {
+            await db.collection("households").doc(id).set(newHouse);
+            DataMgr.log('REGISTER', `New Household: ${id}`);
+            if(confirm(`Registered! Account: ${id}. Print Slip?`)) {
+                Printer.printRegistration(newHouse);
+            } else {
+                document.getElementById('reg-owner').value = '';
+                document.getElementById('reg-phone').value = '';
+            }
+        } catch (e) {
+            UI.globalAlert('Registration failed – check permissions', 'error');
         }
     },
 
@@ -829,12 +863,15 @@ const App = {
         const ref = 'TX' + Date.now().toString().slice(-6);
         const tx = { ref, acc: id, kindred: house.kindred, owner: house.owner, amount: amt, date, particulars: part, by: Auth.user.user };
 
-        await db.collection("transactions").add(tx);
-        DataMgr.log('COLLECTION', `Received ${amt} from ${id}`);
-
-        Printer.printCollection(tx);
-        document.getElementById('pay-amt').value = '';
-        document.getElementById('pay-part').value = '';
+        try {
+            await db.collection("transactions").add(tx);
+            DataMgr.log('COLLECTION', `Received ${amt} from ${id}`);
+            Printer.printCollection(tx);
+            document.getElementById('pay-amt').value = '';
+            document.getElementById('pay-part').value = '';
+        } catch (e) {
+            UI.globalAlert('Collection failed – check permissions', 'error');
+        }
     },
 
     processRemittance: async () => {
@@ -846,24 +883,28 @@ const App = {
         if(!amt || !date) return UI.globalAlert('Enter amount and date', 'error');
 
         const ledgersRef = db.collection("metadata").doc("ledgers");
-        await db.runTransaction(async (transaction) => {
-            const ledgersDoc = await transaction.get(ledgersRef);
-            if (!ledgersDoc.exists) {
-                throw "Ledgers document missing!";
+        try {
+            await db.runTransaction(async (transaction) => {
+                const ledgersDoc = await transaction.get(ledgersRef);
+                if (!ledgersDoc.exists) {
+                    throw "Ledgers document missing!";
+                }
+                const newRemitted = ledgersDoc.data()[k].remitted + amt;
+                transaction.update(ledgersRef, { [`${k}.remitted`]: newRemitted });
+            });
+
+            const remitObj = { date, kindred: k, amount: amt, ref: note, by: Auth.user.user };
+            await db.collection("remittances").add(remitObj);
+
+            DataMgr.log('REMITTANCE', `${k} remitted ${amt}`);
+            UI.globalAlert('Remittance Recorded', 'success');
+            App.loadRemittances();
+
+            if(confirm('Print Remittance Receipt?')) {
+                Printer.printRemittance(remitObj);
             }
-            const newRemitted = ledgersDoc.data()[k].remitted + amt;
-            transaction.update(ledgersRef, { [`${k}.remitted`]: newRemitted });
-        });
-
-        const remitObj = { date, kindred: k, amount: amt, ref: note, by: Auth.user.user };
-        await db.collection("remittances").add(remitObj);
-
-        DataMgr.log('REMITTANCE', `${k} remitted ${amt}`);
-        UI.globalAlert('Remittance Recorded', 'success');
-        App.loadRemittances();
-
-        if(confirm('Print Remittance Receipt?')) {
-            Printer.printRemittance(remitObj);
+        } catch (e) {
+            UI.globalAlert('Remittance failed – check permissions', 'error');
         }
     },
 
@@ -888,20 +929,24 @@ const App = {
         if(!amt) return;
         const share = amt / 3;
         const ledgersRef = db.collection("metadata").doc("ledgers");
-        await db.runTransaction(async (transaction) => {
-            const ledgersDoc = await transaction.get(ledgersRef);
-            if (!ledgersDoc.exists) {
-                transaction.set(ledgersRef, DataMgr.data.ledgers);
-            }
-            const current = ledgersDoc.data() || DataMgr.data.ledgers;
-            const updates = {};
-            ['Oduebo', 'Oparadim', 'Ezealaoma'].forEach(k => {
-                updates[`${k}.debt`] = (current[k]?.debt || 0) + share;
+        try {
+            await db.runTransaction(async (transaction) => {
+                const ledgersDoc = await transaction.get(ledgersRef);
+                if (!ledgersDoc.exists) {
+                    transaction.set(ledgersRef, DataMgr.data.ledgers);
+                }
+                const current = ledgersDoc.data() || DataMgr.data.ledgers;
+                const updates = {};
+                ['Oduebo', 'Oparadim', 'Ezealaoma'].forEach(k => {
+                    updates[`${k}.debt`] = (current[k]?.debt || 0) + share;
+                });
+                transaction.update(ledgersRef, updates);
             });
-            transaction.update(ledgersRef, updates);
-        });
-        DataMgr.log('BILLING', `Allocated total bill ${amt}`);
-        UI.globalAlert('Bill Allocated Successfully', 'success');
+            DataMgr.log('BILLING', `Allocated total bill ${amt}`);
+            UI.globalAlert('Bill Allocated Successfully', 'success');
+        } catch (e) {
+            UI.globalAlert('Billing failed – check permissions', 'error');
+        }
     },
 
     loadDashboard: () => {
@@ -1031,23 +1076,31 @@ const App = {
 
         const usersRef = db.collection("users");
         const existing = DataMgr.data.users.find(x => x.user === u);
-        if (existing) {
-            await usersRef.doc(existing.id).update({ user: u, pass: p, role: r });
-        } else {
-            await usersRef.add({ user: u, pass: p, role: r });
+        try {
+            if (existing) {
+                await usersRef.doc(existing.id).update({ user: u, pass: p, role: r });
+            } else {
+                await usersRef.add({ user: u, pass: p, role: r });
+            }
+            DataMgr.log('USER_MGMT', `Updated/Created user ${u} as ${r}`);
+            UI.globalAlert('User Saved', 'success');
+            App.loadUsers();
+        } catch (e) {
+            UI.globalAlert('Save failed – check permissions', 'error');
         }
-        DataMgr.log('USER_MGMT', `Updated/Created user ${u} as ${r}`);
-        UI.globalAlert('User Saved', 'success');
-        App.loadUsers();
     },
 
     deleteUser: async (username) => {
         if(confirm(`Delete user ${username}?`)) {
             const userDoc = DataMgr.data.users.find(u => u.user === username);
             if (userDoc && userDoc.id) {
-                await db.collection("users").doc(userDoc.id).delete();
-                DataMgr.log('USER_MGMT', `Deleted user ${username}`);
-                App.loadUsers();
+                try {
+                    await db.collection("users").doc(userDoc.id).delete();
+                    DataMgr.log('USER_MGMT', `Deleted user ${username}`);
+                    App.loadUsers();
+                } catch (e) {
+                    UI.globalAlert('Delete failed – check permissions', 'error');
+                }
             }
         }
     },
@@ -1056,32 +1109,35 @@ const App = {
         if(document.getElementById('wipe-pass').value === 'supro123') {
             if(confirm('ARE YOU SURE? THIS IS PERMANENT.')) {
                 const batch = db.batch();
-                await db.collection("households").get().then(snapshot => {
-                    snapshot.docs.forEach(doc => batch.delete(doc.ref));
-                });
-                await db.collection("transactions").get().then(snapshot => {
-                    snapshot.docs.forEach(doc => batch.delete(doc.ref));
-                });
-                await db.collection("remittances").get().then(snapshot => {
-                    snapshot.docs.forEach(doc => batch.delete(doc.ref));
-                });
-                await db.collection("audit").get().then(snapshot => {
-                    snapshot.docs.forEach(doc => batch.delete(doc.ref));
-                });
-                batch.set(db.collection("metadata").doc("ledgers"), {
-                    Oduebo: { debt: 0, remitted: 0 },
-                    Oparadim: { debt: 0, remitted: 0 },
-                    Ezealaoma: { debt: 0, remitted: 0 }
-                });
-                await db.collection("users").get().then(snapshot => {
-                    snapshot.docs.forEach(doc => {
-                        if (doc.data().user !== 'Superadmin') batch.delete(doc.ref);
+                try {
+                    await db.collection("households").get().then(snapshot => {
+                        snapshot.docs.forEach(doc => batch.delete(doc.ref));
                     });
-                });
-                await batch.commit();
-                
-                alert('SYSTEM WIPED');
-                location.reload();
+                    await db.collection("transactions").get().then(snapshot => {
+                        snapshot.docs.forEach(doc => batch.delete(doc.ref));
+                    });
+                    await db.collection("remittances").get().then(snapshot => {
+                        snapshot.docs.forEach(doc => batch.delete(doc.ref));
+                    });
+                    await db.collection("audit").get().then(snapshot => {
+                        snapshot.docs.forEach(doc => batch.delete(doc.ref));
+                    });
+                    batch.set(db.collection("metadata").doc("ledgers"), {
+                        Oduebo: { debt: 0, remitted: 0 },
+                        Oparadim: { debt: 0, remitted: 0 },
+                        Ezealaoma: { debt: 0, remitted: 0 }
+                    });
+                    await db.collection("users").get().then(snapshot => {
+                        snapshot.docs.forEach(doc => {
+                            if (doc.data().user !== 'Superadmin') batch.delete(doc.ref);
+                        });
+                    });
+                    await batch.commit();
+                    alert('SYSTEM WIPED');
+                    location.reload();
+                } catch (e) {
+                    alert('Wipe failed – check permissions');
+                }
             }
         } else {
             alert('Wrong Password');
@@ -1110,17 +1166,20 @@ const App = {
         }
         
         const userRef = db.collection("users").doc(Auth.user.id);
-        await userRef.update({ pass: newPass });
-        Auth.user.pass = newPass;
-        DataMgr.save(); // not needed but kept for compatibility
-        DataMgr.log('PASSWORD_CHANGE', 'User changed password');
-        UI.globalAlert('Password updated successfully', 'success');
-        
-        document.getElementById('current-pass').value = '';
-        document.getElementById('new-pass').value = '';
-        document.getElementById('confirm-pass').value = '';
-        
-        setTimeout(() => Router.go('dashboard'), 1500);
+        try {
+            await userRef.update({ pass: newPass });
+            Auth.user.pass = newPass;
+            DataMgr.log('PASSWORD_CHANGE', 'User changed password');
+            UI.globalAlert('Password updated successfully', 'success');
+            
+            document.getElementById('current-pass').value = '';
+            document.getElementById('new-pass').value = '';
+            document.getElementById('confirm-pass').value = '';
+            
+            setTimeout(() => Router.go('dashboard'), 1500);
+        } catch (e) {
+            UI.globalAlert('Password change failed – check permissions', 'error');
+        }
     },
     
     loadStatement: (accountNo) => {
