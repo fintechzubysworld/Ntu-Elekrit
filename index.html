@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ntu Electricity Management System v4.2 (Public Statements)</title>
+    <title>Ntu Electricity Management System v4.3 (Simplified Statements)</title>
     <!-- Firebase SDK (compat version) -->
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
@@ -113,8 +113,8 @@
 <!-- LOGIN + PUBLIC STATEMENT VIEW -->
 <div id="view-login" class="container" style="max-width: 400px; margin-top: 60px; padding: 20px;">
     <div style="text-align: center; margin-bottom: 20px;">
-        <h2 style="color: var(--primary);">Ntu Electricity System v4.2</h2>
-        <p>Public Statement Lookup</p>
+        <h2 style="color: var(--primary);">Ntu Electricity System v4.3</h2>
+        <p>Simplified Statements</p>
     </div>
     
     <div style="background: #eef2f7; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center;">
@@ -838,7 +838,6 @@ const Public = {
         filteredTxs.sort((a, b) => new Date(b.date) - new Date(a.date));
 
         const totalPaid = filteredTxs.reduce((sum, t) => sum + t.amount, 0);
-        const kindredLedger = DataMgr.data.ledgers[house.kindred] || { debt: 0, remitted: 0 };
 
         let txsHtml = '';
         filteredTxs.forEach(tx => {
@@ -892,18 +891,9 @@ const Public = {
                 
                 <div style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-top: 20px;">
                     <h4 style="margin: 0 0 10px 0;">SUMMARY</h4>
-                    <div style="display: flex; justify-content: space-between; flex-wrap: wrap;">
-                        <div style="flex: 1; min-width: 200px;">
-                            <p><strong>Total Amount Paid:</strong></p>
-                            <p><strong>Kindred Allocation:</strong></p>
-                            <p><strong>Kindred Remitted:</strong></p>
-                            <p style="color: var(--accent);"><strong>Account Status:</strong></p>
-                        </div>
-                        <div style="flex: 1; min-width: 200px; text-align: right;">
-                            <p><strong>₦${totalPaid.toFixed(2)}</strong></p>
-                            <p>₦${kindredLedger.debt.toFixed(2)}</p>
-                            <p>₦${kindredLedger.remitted.toFixed(2)}</p>
-                            <p style="color: var(--accent);"><strong>ACTIVE</strong></p>
+                    <div style="display: flex; justify-content: flex-end;">
+                        <div style="text-align: right;">
+                            <p><strong>Total Amount Paid: ₦${totalPaid.toFixed(2)}</strong></p>
                         </div>
                     </div>
                 </div>
@@ -922,7 +912,6 @@ const Public = {
             account: house,
             transactions: filteredTxs,
             totalPaid: totalPaid,
-            kindredLedger: kindredLedger,
             generatedDate: new Date().toLocaleDateString()
         };
     },
@@ -1449,7 +1438,6 @@ const App = {
         filteredTxs.sort((a, b) => new Date(b.date) - new Date(a.date));
         
         const totalPaid = filteredTxs.reduce((sum, t) => sum + t.amount, 0);
-        const kindredLedger = DataMgr.data.ledgers[house.kindred] || { debt: 0, remitted: 0 };
         
         let txsHtml = '';
         filteredTxs.forEach((tx, index) => {
@@ -1506,18 +1494,9 @@ const App = {
                 
                 <div style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-top: 20px;">
                     <h4 style="margin: 0 0 10px 0;">SUMMARY</h4>
-                    <div style="display: flex; justify-content: space-between; flex-wrap: wrap;">
-                        <div style="flex: 1; min-width: 200px;">
-                            <p><strong>Total Amount Paid:</strong></p>
-                            <p><strong>Kindred Allocation:</strong></p>
-                            <p><strong>Kindred Remitted:</strong></p>
-                            <p style="color: var(--accent);"><strong>Account Status:</strong></p>
-                        </div>
-                        <div style="flex: 1; min-width: 200px; text-align: right;">
-                            <p><strong>₦${totalPaid.toFixed(2)}</strong></p>
-                            <p>₦${kindredLedger.debt.toFixed(2)}</p>
-                            <p>₦${kindredLedger.remitted.toFixed(2)}</p>
-                            <p style="color: var(--accent);"><strong>ACTIVE</strong></p>
+                    <div style="display: flex; justify-content: flex-end;">
+                        <div style="text-align: right;">
+                            <p><strong>Total Amount Paid: ₦${totalPaid.toFixed(2)}</strong></p>
                         </div>
                     </div>
                 </div>
@@ -1534,7 +1513,6 @@ const App = {
             account: house,
             transactions: filteredTxs,
             totalPaid: totalPaid,
-            kindredLedger: kindredLedger,
             period: period,
             generatedDate: new Date().toLocaleDateString()
         };
@@ -1636,7 +1614,6 @@ const Printer = {
             <p><strong>Name:</strong> ${stmtData.account.owner}</p>
             <p><strong>Kindred:</strong> ${stmtData.account.kindred} (${stmtData.account.sub})</p>
             <p><strong>Phone:</strong> ${stmtData.account.phone}</p>
-            <p><strong>Period:</strong> All Time</p>
             <hr style="border-top: 1px dashed #000;">
             <table style="width: 100%; border-collapse: collapse;">
                 <thead>
@@ -1653,16 +1630,6 @@ const Printer = {
             </table>
             <hr style="border-top: 1px dashed #000;">
             <h3 style="text-align: right;">Total Paid: ₦${stmtData.totalPaid.toFixed(2)}</h3>
-            <hr style="border-top: 1px dashed #000;">
-            <div style="display: flex; justify-content: space-between; margin-top: 20px;">
-                <div>
-                    <p><strong>Kindred Allocation:</strong> ₦${stmtData.kindredLedger.debt.toFixed(2)}</p>
-                    <p><strong>Kindred Remitted:</strong> ₦${stmtData.kindredLedger.remitted.toFixed(2)}</p>
-                </div>
-                <div>
-                    <p><strong>Account Status:</strong> ACTIVE</p>
-                </div>
-            </div>
             <hr style="border-top: 1px dashed #000;">
             <p style="text-align: center; font-size: 11px;">Official Statement - NTU Electricity System</p>
         `);
