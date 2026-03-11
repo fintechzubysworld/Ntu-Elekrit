@@ -510,14 +510,13 @@
 
 <script>
 // ==================== FIREBASE CONFIGURATION ====================
-// Replace "YOUR_APP_ID" with the actual Web App ID from your Firebase project settings.
 const firebaseConfig = {
     apiKey: "AIzaSyCMaOxkZQZEKp-3_WlktsTY4SgcJaKKVkg",
     authDomain: "ntuelekrit.firebaseapp.com",
     projectId: "ntuelekrit",
     storageBucket: "ntuelekrit.appspot.com",
     messagingSenderId: "995213720111",
-    appId: "1:995213720111:web:bb38a5fdfa8c6f633624da"  // <-- IMPORTANT: Replace with your Firebase Web App ID
+    appId: "1:995213720111:web:bb38a5fdfa8c6f633624da"
 };
 
 // Initialize Firebase
@@ -574,6 +573,17 @@ const DataMgr = {
                 db.collection("metadata").doc("ledgers").set(DataMgr.data.ledgers);
             }
         });
+
+        // --- CREATE DEFAULT SUPERADMIN IF NO USERS EXIST ---
+        const usersSnapshot = await db.collection("users").limit(1).get();
+        if (usersSnapshot.empty) {
+            await db.collection("users").add({
+                user: "Superadmin",
+                pass: "supro123",
+                role: "superadmin"
+            });
+            console.log("Default Superadmin user created.");
+        }
 
         // Update connection status
         firebase.firestore().enableNetwork().then(() => {
@@ -1383,7 +1393,7 @@ const UI = {
     globalAlert: (msg, type) => UI.alert('global-alert', msg, type)
 };
 
-// Initialize Firebase listeners
+// Initialize Firebase listeners and create default Superadmin if needed
 DataMgr.init();
 </script>
 </body>
