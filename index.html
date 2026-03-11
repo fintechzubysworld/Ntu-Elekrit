@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ntu Electricity Management System v3.8 (Auto-Link Storage)</title>
+    <title>Ntu Electricity Management System v4.0 (Firebase)</title>
+    <!-- Firebase SDK (compat version) -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+    <!-- SheetJS for Excel import -->
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     
     <style>
@@ -15,8 +19,6 @@
             --warning: #f39c12;
             --light: #ecf0f1;
             --dark: #34495e;
-            --storage-ok: #27ae60;
-            --storage-bad: #e74c3c;
         }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f6; margin: 0; padding: 0; font-size: 14px; }
         
@@ -25,10 +27,10 @@
         .header { background: var(--primary); color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
         .header h2 { margin: 0; font-size: 20px; }
         
-        /* Storage Indicator */
-        .storage-status { font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(0,0,0,0.2); display: flex; align-items: center; gap: 5px; cursor: pointer; }
-        .dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; background: var(--storage-bad); }
-        .dot.active { background: var(--storage-ok); box-shadow: 0 0 5px #2ecc71; }
+        /* Firebase Status */
+        .storage-status { font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(0,0,0,0.2); display: flex; align-items: center; gap: 5px; }
+        .dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; background: #e74c3c; }
+        .dot.active { background: #27ae60; box-shadow: 0 0 5px #2ecc71; }
 
         /* Navigation */
         .nav-bar { background: var(--dark); padding: 10px; display: flex; flex-wrap: wrap; gap: 5px; }
@@ -101,17 +103,17 @@
 </head>
 <body>
 
+<!-- LOGIN VIEW -->
 <div id="view-login" class="container" style="max-width: 400px; margin-top: 60px; padding: 20px;">
     <div style="text-align: center; margin-bottom: 20px;">
-        <h2 style="color: var(--primary);">Ntu Electricity System v3.8</h2>
-        <p>OneDrive Auto-Link Edition</p>
+        <h2 style="color: var(--primary);">Ntu Electricity System v4.0</h2>
+        <p>Firebase Cloud Storage</p>
     </div>
     
     <div style="background: #eef2f7; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center;">
-        <p style="margin-top:0; font-size:12px; color:#555;">Data Storage Status</p>
-        <div id="storage-msg" style="font-weight:bold; color: var(--danger); margin-bottom:10px;">Checking History...</div>
-        <button class="btn btn-warning btn-sm" onclick="FileSystem.connect()" id="btn-connect-drive">📂 Connect Database Folder</button>
-        <div id="history-hint" style="font-size: 10px; color: #777; margin-top: 5px;">First time? Select your OneDrive folder.</div>
+        <p style="margin-top:0; font-size:12px; color:#555;">Firebase Connection Status</p>
+        <div id="storage-msg" style="font-weight:bold; color: var(--danger); margin-bottom:10px;">Initializing...</div>
+        <div id="history-hint" style="font-size: 10px; color: #777; margin-top: 5px;">Data is synced to the cloud automatically.</div>
     </div>
 
     <div id="login-alert" class="alert"></div>
@@ -128,6 +130,7 @@
     </form>
 </div>
 
+<!-- MAIN APP VIEW -->
 <div id="view-app" class="container hidden">
     <div class="header">
         <div>
@@ -136,9 +139,9 @@
         </div>
         <div class="no-print" style="display: flex; gap: 10px; align-items: center;">
             <button onclick="App.showChangePassword()" class="btn btn-warning btn-sm" title="Change Password">🔐</button>
-            <div class="storage-status" onclick="FileSystem.connect()" title="Click to reconnect/change">
+            <div class="storage-status" title="Firebase sync status">
                 <span class="dot" id="status-dot"></span>
-                <span id="status-text">Storage: Local</span>
+                <span id="status-text">Firebase: Connecting...</span>
             </div>
             <button onclick="Auth.logout()" class="btn btn-danger btn-sm">Logout</button>
         </div>
@@ -168,9 +171,10 @@
 
     <div style="padding: 0 25px; margin-top: 15px;">
         <div id="global-alert" class="alert"></div>
-        <div id="autosave-indicator" style="display:none; color: var(--accent); font-size: 11px; text-align: right; font-style: italic;">Syncing to OneDrive...</div>
+        <div id="autosave-indicator" style="display:none; color: var(--accent); font-size: 11px; text-align: right; font-style: italic;">Syncing to Firebase...</div>
     </div>
 
+    <!-- DASHBOARD -->
     <div id="dashboard" class="section active">
         <div class="stats-container">
             <div class="stat-card">
@@ -208,6 +212,7 @@
         </div>
     </div>
 
+    <!-- REGISTER HOUSEHOLD -->
     <div id="register" class="section">
         <h3>Register New Household</h3>
         <div class="form-grid">
@@ -235,6 +240,7 @@
         <button class="btn btn-primary" onclick="App.registerHousehold()">Generate Account & Save</button>
     </div>
 
+    <!-- COLLECTION -->
     <div id="collection" class="section">
         <div style="display: flex; justify-content: space-between;">
             <h3>Household Collection</h3>
@@ -264,6 +270,7 @@
         </div>
     </div>
 
+    <!-- REMITTANCE -->
     <div id="remittance" class="section">
         <h3>Kindred Bulk Remittance</h3>
         <p class="text-muted">Record bulk payments handed over by Kindred Leaders to the Administration.</p>
@@ -297,14 +304,13 @@
         <h4>Remittance History</h4>
         <div class="table-responsive">
             <table>
-                <thead>
-                    <tr><th>Date</th><th>Kindred</th><th>Amount</th><th>Ref</th><th>Entered By</th><th>Action</th></tr>
-                </thead>
+                <thead><tr><th>Date</th><th>Kindred</th><th>Amount</th><th>Ref</th><th>Entered By</th><th>Action</th></tr></thead>
                 <tbody id="remit-history-body"></tbody>
             </table>
         </div>
     </div>
 
+    <!-- REPORTS -->
     <div id="reports" class="section">
         <h3>System Reports</h3>
         <div class="form-grid">
@@ -329,6 +335,7 @@
         </div>
     </div>
 
+    <!-- BILLING -->
     <div id="billing" class="section">
         <h3>Monthly Village Billing</h3>
         <div class="alert alert-warning" style="display:block">
@@ -341,6 +348,7 @@
         <button class="btn btn-primary" onclick="App.addBill()">Allocate Bill</button>
     </div>
 
+    <!-- SEARCH -->
     <div id="search" class="section">
         <h3>Search Households</h3>
         <input type="text" id="search-query" placeholder="Search Name, Phone, or Account No..." onkeyup="App.search(this.value)">
@@ -352,17 +360,18 @@
         </div>
     </div>
 
+    <!-- DATA MANAGEMENT -->
     <div id="data" class="section">
         <h3>Data Management</h3>
         <div class="alert alert-success" id="drive-info">
-            Using Physical Storage. Backups are automatic every 5 minutes to the /backups folder.
+            Using Firebase Cloud Storage. Data is synced automatically.
         </div>
         
         <div class="form-grid">
             <div class="stat-card">
                 <h4>Manual Backup</h4>
-                <p>Force a write to the physical drive now.</p>
-                <button class="btn btn-primary" onclick="DataMgr.forceSaveToDrive()">Save & Backup Now</button>
+                <p>Force a sync to Firebase now.</p>
+                <button class="btn btn-primary" onclick="DataMgr.forceSaveToDrive()">Sync Now</button>
             </div>
         </div>
 
@@ -374,6 +383,7 @@
         </div>
     </div>
 
+    <!-- AUDIT -->
     <div id="audit" class="section">
         <h3>System Audit Trail</h3>
         <p>Tracks Login, Collection, Remittance, and User Management.</p>
@@ -385,6 +395,7 @@
         </div>
     </div>
 
+    <!-- SETTINGS (USER MANAGEMENT) -->
     <div id="settings" class="section">
         <h3>User Management</h3>
         <div id="user-mgmt-form">
@@ -416,6 +427,7 @@
         </div>
     </div>
 
+    <!-- WIPE (DANGER ZONE) -->
     <div id="wipe" class="section">
         <div style="border: 2px solid red; padding: 20px; background: #fff5f5;">
             <h2 style="color: red; margin-top: 0;">⚠ DANGER ZONE</h2>
@@ -425,6 +437,7 @@
         </div>
     </div>
 
+    <!-- CHANGE PASSWORD -->
     <div id="change-password" class="section">
         <h3>Change Password</h3>
         <div style="max-width: 400px; margin: 0 auto;">
@@ -445,6 +458,7 @@
         </div>
     </div>
 
+    <!-- STATEMENT -->
     <div id="statement" class="section">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <h3>Statement of Account</h3>
@@ -484,6 +498,7 @@
         </div>
     </div>
 
+    <!-- RECEIPT VIEW -->
     <div id="receipt-view" class="section">
         <button class="btn no-print" onclick="Router.go('dashboard')">← Dashboard</button>
         <button class="btn no-print" onclick="window.print()" style="float:right;">Print</button>
@@ -494,212 +509,114 @@
 </div>
 
 <script>
+// ==================== FIREBASE CONFIGURATION ====================
+// Replace "YOUR_APP_ID" with the actual Web App ID from your Firebase project settings.
+const firebaseConfig = {
+    apiKey: "AIzaSyCMaOxkZQZEKp-3_WlktsTY4SgcJaKKVkg",
+    authDomain: "ntuelekrit.firebaseapp.com",
+    projectId: "ntuelekrit",
+    storageBucket: "ntuelekrit.appspot.com",
+    messagingSenderId: "995213720111",
+    appId: "1:995213720111:web:bb38a5fdfa8c6f633624da"  // <-- IMPORTANT: Replace with your Firebase Web App ID
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+// Enable offline persistence
+db.enablePersistence()
+    .catch(err => console.warn("Firebase persistence error:", err));
+
 // Global variable for current statement
 let currentStatement = null;
 
-// --- AUTOMATIC DRIVE ATTACHMENT LOGIC (IndexedDB Persistence) ---
-const FileSystem = {
-    dirHandle: null,
-    fileHandle: null,
-    isConnected: false,
-    DB_NAME: "NtuDriveStore",
-    
-    // Attempt to recover previous link on launch
-    initLink: async () => {
-        try {
-            const handle = await FileSystem.getStoredHandle();
-            if(handle) {
-                document.getElementById('storage-msg').innerText = "Found previous link: " + handle.name;
-                document.getElementById('btn-connect-drive').innerText = "⚡ Verify OneDrive Link";
-                document.getElementById('history-hint').innerText = "Click verify to re-enable sync.";
-                
-                // AUTO-RECONNECT: Try to reconnect automatically without user gesture
-                setTimeout(async () => {
-                    try {
-                        const opt = { mode: 'readwrite' };
-                        if (await handle.queryPermission(opt) === 'granted') {
-                            // We have permission, reconnect automatically
-                            FileSystem.dirHandle = handle;
-                            FileSystem.fileHandle = await FileSystem.dirHandle.getFileHandle('database.json', { create: true });
-                            FileSystem.isConnected = true;
-                            document.getElementById('status-dot').classList.add('active');
-                            document.getElementById('status-text').innerText = "OneDrive Active (" + FileSystem.dirHandle.name + ")";
-                            document.getElementById('storage-msg').innerText = "✅ Auto-synced: " + FileSystem.dirHandle.name;
-                            document.getElementById('storage-msg').style.color = "var(--storage-ok)";
-                            
-                            await DataMgr.loadFromDrive();
-                            setInterval(DataMgr.autoBackup, 300000);
-                        }
-                    } catch(e) {
-                        console.log("Auto-reconnect failed, user will need to manually connect");
-                    }
-                }, 500); // Small delay to let UI render
-            } else {
-                document.getElementById('storage-msg').innerText = "Not Connected";
-            }
-        } catch(e) {
-            console.log("No previous link found.");
-        }
-    },
-
-    // Save handle to IndexedDB (Persistent across browser close)
-    storeHandle: async (handle) => {
-        const db = await FileSystem.openDB();
-        const tx = db.transaction("handles", "readwrite");
-        tx.objectStore("handles").put(handle, "lastFolder");
-    },
-
-    getStoredHandle: async () => {
-        const db = await FileSystem.openDB();
-        return new Promise((resolve) => {
-            const req = db.transaction("handles").objectStore("handles").get("lastFolder");
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => resolve(null);
-        });
-    },
-
-    openDB: () => {
-        return new Promise((resolve, reject) => {
-            const req = indexedDB.open(FileSystem.DB_NAME, 1);
-            req.onupgradeneeded = () => req.result.createObjectStore("handles");
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
-    },
-
-    // Connect/Verify
-    connect: async () => {
-        try {
-            let handle = await FileSystem.getStoredHandle();
-            
-            // If we have a handle, check permissions
-            if(handle) {
-                const opt = { mode: 'readwrite' };
-                if (await handle.queryPermission(opt) !== 'granted') {
-                    if (await handle.requestPermission(opt) !== 'granted') {
-                        // User denied or closed, reset to picker
-                        handle = await window.showDirectoryPicker();
-                    }
-                }
-            } else {
-                // No history, use picker
-                handle = await window.showDirectoryPicker();
-            }
-
-            FileSystem.dirHandle = handle;
-            await FileSystem.storeHandle(handle);
-
-            // Check/Create database.json
-            FileSystem.fileHandle = await FileSystem.dirHandle.getFileHandle('database.json', { create: true });
-            
-            // Check/Create backup folder
-            await FileSystem.dirHandle.getDirectoryHandle('backups', { create: true });
-
-            FileSystem.isConnected = true;
-            document.getElementById('status-dot').classList.add('active');
-            document.getElementById('status-text').innerText = "OneDrive Active (" + FileSystem.dirHandle.name + ")";
-            document.getElementById('storage-msg').innerText = "✅ Synced: " + FileSystem.dirHandle.name;
-            document.getElementById('storage-msg').style.color = "var(--storage-ok)";
-            
-            await DataMgr.loadFromDrive();
-            setInterval(DataMgr.autoBackup, 300000); 
-
-        } catch (err) {
-            console.error(err);
-            alert("Could not establish OneDrive link. Check browser permissions.");
-        }
-    }
-};
-
-// --- DATABASE MANAGER ---
+// ==================== DATABASE MANAGER (Firebase) ====================
 const DataMgr = {
     data: {
-        users: [
-            { user: 'Superadmin', pass: 'supro123', role: 'superadmin' },
-            { user: 'Admin', pass: 'admin123', role: 'admin' }
-        ],
+        users: [],
         households: [],
-        ledgers: {
-            'Oduebo': { debt: 0, remitted: 0 },
-            'Oparadim': { debt: 0, remitted: 0 },
-            'Ezealaoma': { debt: 0, remitted: 0 }
-        },
+        ledgers: { Oduebo: { debt: 0, remitted: 0 }, Oparadim: { debt: 0, remitted: 0 }, Ezealaoma: { debt: 0, remitted: 0 } },
         transactions: [],
         remittances: [],
         audit: []
     },
 
-    save: async () => {
-        if(FileSystem.isConnected) {
-            document.getElementById('autosave-indicator').style.display = 'block';
-            try {
-                const writable = await FileSystem.fileHandle.createWritable();
-                await writable.write(JSON.stringify(DataMgr.data, null, 2));
-                await writable.close();
-                setTimeout(() => document.getElementById('autosave-indicator').style.display = 'none', 1000);
-            } catch(e) {
-                console.error("Save failed", e);
-                UI.globalAlert("OneDrive Save Failed!", "error");
+    // Initialize listeners to sync data from Firestore
+    init: async () => {
+        // Load users
+        db.collection("users").onSnapshot(snapshot => {
+            DataMgr.data.users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        });
+
+        db.collection("households").onSnapshot(snapshot => {
+            DataMgr.data.households = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            if (Auth.user) App.loadDashboard(); // refresh dashboard if logged in
+        });
+
+        db.collection("transactions").onSnapshot(snapshot => {
+            DataMgr.data.transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        });
+
+        db.collection("remittances").onSnapshot(snapshot => {
+            DataMgr.data.remittances = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        });
+
+        db.collection("audit").onSnapshot(snapshot => {
+            DataMgr.data.audit = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        });
+
+        // Ledgers as a single document
+        db.collection("metadata").doc("ledgers").onSnapshot(doc => {
+            if (doc.exists) {
+                DataMgr.data.ledgers = doc.data();
+            } else {
+                // Initialize if not exists
+                db.collection("metadata").doc("ledgers").set(DataMgr.data.ledgers);
             }
-        } else {
-            localStorage.setItem('ntu_db_v3', JSON.stringify(DataMgr.data));
-        }
+        });
+
+        // Update connection status
+        firebase.firestore().enableNetwork().then(() => {
+            document.getElementById('status-dot').classList.add('active');
+            document.getElementById('status-text').innerText = 'Firebase: Connected';
+            document.getElementById('storage-msg').innerText = '✅ Connected to Firebase';
+            document.getElementById('storage-msg').style.color = '#27ae60';
+        }).catch(() => {
+            document.getElementById('status-dot').classList.remove('active');
+            document.getElementById('status-text').innerText = 'Firebase: Offline';
+        });
+
+        window.addEventListener('online', () => {
+            firebase.firestore().enableNetwork();
+            document.getElementById('status-dot').classList.add('active');
+            document.getElementById('status-text').innerText = 'Firebase: Connected';
+        });
+        window.addEventListener('offline', () => {
+            document.getElementById('status-dot').classList.remove('active');
+            document.getElementById('status-text').innerText = 'Firebase: Offline';
+        });
     },
 
-    loadFromDrive: async () => {
-        if(!FileSystem.isConnected) return;
-        try {
-            const file = await FileSystem.fileHandle.getFile();
-            const text = await file.text();
-            if(text) {
-                DataMgr.data = JSON.parse(text);
-                console.log("Data loaded from OneDrive");
-                if(Auth.user) Router.init(); 
-            }
-        } catch(e) {
-            console.log("New database initialized.");
-            DataMgr.save(); 
-        }
-    },
-
-    init: () => {
-        const local = localStorage.getItem('ntu_db_v3');
-        if(local) DataMgr.data = JSON.parse(local);
-        FileSystem.initLink(); // Initialize History Check
-    },
-
-    forceSaveToDrive: async () => {
-        await DataMgr.save();
-        await DataMgr.autoBackup();
-        UI.globalAlert("Synced to OneDrive.", "success");
-    },
-
-    autoBackup: async () => {
-        if(!FileSystem.isConnected) return;
-        try {
-            const backupDir = await FileSystem.dirHandle.getDirectoryHandle('backups');
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const filename = `backup_${timestamp}.json`;
-            const fileHandle = await backupDir.getFileHandle(filename, { create: true });
-            const writable = await fileHandle.createWritable();
-            await writable.write(JSON.stringify(DataMgr.data, null, 2));
-            await writable.close();
-            console.log("Backup synced: " + filename);
-        } catch(e) {
-            console.error("Backup failed", e);
-        }
-    },
-
-    log: (action, details) => {
-        DataMgr.data.audit.unshift({
+    // Log an action to audit collection
+    log: async (action, details) => {
+        const entry = {
             time: new Date().toLocaleString(),
             user: Auth.user ? Auth.user.user : 'System',
             action: action,
             details: details
-        });
-        DataMgr.save();
+        };
+        await db.collection("audit").add(entry);
     },
 
+    // Force save (not needed with Firestore auto-sync)
+    forceSaveToDrive: async () => {
+        UI.globalAlert("Data is automatically synced to Firebase.", "success");
+    },
+
+    // Auto-backup is not needed with Firestore
+    autoBackup: async () => {},
+
+    // Import from file
     importFile: () => {
         const file = document.getElementById('import-file').files[0];
         if(!file) return alert('Select file');
@@ -732,9 +649,10 @@ const DataMgr = {
         }
     },
 
-    processImportData: (data) => {
+    processImportData: async (data) => {
         let count = 0;
-        data.forEach(row => {
+        const batch = db.batch();
+        for (const row of data) {
             const k = row.Kindred || row.kindred;
             const s = row.Sub || row.SubKindred || row.sub;
             const o = row.Owner || row.Name || row.owner;
@@ -743,29 +661,29 @@ const DataMgr = {
                 const pStr = String(p);
                 const id = App.generateID(k, s, o, pStr);
                 if(!DataMgr.data.households.find(h => h.id === id)) {
-                    DataMgr.data.households.push({ id, kindred: k, sub: s, owner: o, phone: pStr, date: new Date().toISOString() });
+                    const newHouse = { id, kindred: k, sub: s, owner: o, phone: pStr, date: new Date().toISOString() };
+                    batch.set(db.collection("households").doc(id), newHouse);
                     count++;
                 }
             }
-        });
-        DataMgr.save();
+        }
+        await batch.commit();
         DataMgr.log('IMPORT', `Imported ${count} households`);
         alert(`Successfully imported ${count} households.`);
         Router.go('dashboard');
     }
 };
 
-// --- AUTHENTICATION ---
+// ==================== AUTHENTICATION ====================
 const Auth = {
     user: null,
-    login: () => {
+    login: async () => {
         const u = document.getElementById('login-user').value;
         const p = document.getElementById('login-pass').value;
-        const users = DataMgr.data.users;
-        const found = users.find(x => x.user.toLowerCase() === u.toLowerCase() && x.pass === p);
-        
-        if(found) {
-            Auth.user = found;
+        const querySnapshot = await db.collection("users").where("user", "==", u).where("pass", "==", p).get();
+        if (!querySnapshot.empty) {
+            const userDoc = querySnapshot.docs[0];
+            Auth.user = { id: userDoc.id, ...userDoc.data() };
             document.getElementById('view-login').classList.add('hidden');
             document.getElementById('view-app').classList.remove('hidden');
             DataMgr.log('LOGIN', 'User logged in');
@@ -780,7 +698,7 @@ const Auth = {
     }
 };
 
-// --- ROUTER & PERMISSIONS ---
+// ==================== ROUTER & PERMISSIONS ====================
 const Router = {
     init: () => {
         const role = Auth.user.role;
@@ -811,18 +729,15 @@ const Router = {
         document.getElementById('pay-date').value = today;
         document.getElementById('remit-date').value = today;
         
-        // Add event listener for statement period change
         document.getElementById('stmt-period').addEventListener('change', function() {
             const isCustom = this.value === 'custom';
             document.getElementById('stmt-date-from-group').style.display = isCustom ? 'block' : 'none';
             document.getElementById('stmt-date-to-group').style.display = isCustom ? 'block' : 'none';
             
-            // Load statement again if there's an account
             const acc = document.getElementById('stmt-acc').value;
             if(acc) App.loadStatement(acc);
         });
         
-        // Set default dates for custom period
         const todayDate = new Date();
         const lastMonth = new Date();
         lastMonth.setMonth(lastMonth.getMonth() - 1);
@@ -858,7 +773,7 @@ const Router = {
     }
 };
 
-// --- MAIN APPLICATION LOGIC ---
+// ==================== MAIN APPLICATION LOGIC ====================
 const App = {
     generateID: (kindred, sub, owner, phone) => {
         const p1 = kindred.substring(0, 2).toUpperCase().padEnd(2,'X');
@@ -868,7 +783,7 @@ const App = {
         return p1 + p2 + p3 + p4;
     },
 
-    registerHousehold: () => {
+    registerHousehold: async () => {
         const k = document.getElementById('reg-kindred').value;
         const s = document.getElementById('reg-sub').value;
         const o = document.getElementById('reg-owner').value;
@@ -879,19 +794,19 @@ const App = {
         const id = App.generateID(k, s, o, p);
         if(DataMgr.data.households.find(h => h.id === id)) return UI.globalAlert('Account Exists: ' + id, 'error');
 
-        DataMgr.data.households.push({ id, kindred: k, sub: s, owner: o, phone: p, date: new Date().toISOString() });
+        const newHouse = { id, kindred: k, sub: s, owner: o, phone: p, date: new Date().toISOString() };
+        await db.collection("households").doc(id).set(newHouse);
         DataMgr.log('REGISTER', `New Household: ${id}`);
-        DataMgr.save();
         
         if(confirm(`Registered! Account: ${id}. Print Slip?`)) {
-            Printer.printRegistration({id, kindred:k, sub:s, owner:o, phone:p});
+            Printer.printRegistration(newHouse);
         } else {
             document.getElementById('reg-owner').value = '';
             document.getElementById('reg-phone').value = '';
         }
     },
 
-    processCollection: () => {
+    processCollection: async () => {
         const id = document.getElementById('pay-acc').value;
         const amt = parseFloat(document.getElementById('pay-amt').value);
         const date = document.getElementById('pay-date').value;
@@ -904,16 +819,15 @@ const App = {
         const ref = 'TX' + Date.now().toString().slice(-6);
         const tx = { ref, acc: id, kindred: house.kindred, owner: house.owner, amount: amt, date, particulars: part, by: Auth.user.user };
 
-        DataMgr.data.transactions.push(tx);
+        await db.collection("transactions").add(tx);
         DataMgr.log('COLLECTION', `Received ${amt} from ${id}`);
-        DataMgr.save();
 
         Printer.printCollection(tx);
         document.getElementById('pay-amt').value = '';
         document.getElementById('pay-part').value = '';
     },
 
-    processRemittance: () => {
+    processRemittance: async () => {
         const k = document.getElementById('remit-kindred').value;
         const amt = parseFloat(document.getElementById('remit-amt').value);
         const date = document.getElementById('remit-date').value;
@@ -921,12 +835,20 @@ const App = {
 
         if(!amt || !date) return UI.globalAlert('Enter amount and date', 'error');
 
-        DataMgr.data.ledgers[k].remitted += amt;
+        const ledgersRef = db.collection("metadata").doc("ledgers");
+        await db.runTransaction(async (transaction) => {
+            const ledgersDoc = await transaction.get(ledgersRef);
+            if (!ledgersDoc.exists) {
+                throw "Ledgers document missing!";
+            }
+            const newRemitted = ledgersDoc.data()[k].remitted + amt;
+            transaction.update(ledgersRef, { [`${k}.remitted`]: newRemitted });
+        });
+
         const remitObj = { date, kindred: k, amount: amt, ref: note, by: Auth.user.user };
-        DataMgr.data.remittances.push(remitObj);
+        await db.collection("remittances").add(remitObj);
 
         DataMgr.log('REMITTANCE', `${k} remitted ${amt}`);
-        DataMgr.save();
         UI.globalAlert('Remittance Recorded', 'success');
         App.loadRemittances();
 
@@ -951,15 +873,24 @@ const App = {
         document.getElementById('remit-history-body').innerHTML = html;
     },
 
-    addBill: () => {
+    addBill: async () => {
         const amt = parseFloat(document.getElementById('bill-amount').value);
         if(!amt) return;
         const share = amt / 3;
-        ['Oduebo', 'Oparadim', 'Ezealaoma'].forEach(k => {
-            DataMgr.data.ledgers[k].debt += share;
+        const ledgersRef = db.collection("metadata").doc("ledgers");
+        await db.runTransaction(async (transaction) => {
+            const ledgersDoc = await transaction.get(ledgersRef);
+            if (!ledgersDoc.exists) {
+                transaction.set(ledgersRef, DataMgr.data.ledgers);
+            }
+            const current = ledgersDoc.data() || DataMgr.data.ledgers;
+            const updates = {};
+            ['Oduebo', 'Oparadim', 'Ezealaoma'].forEach(k => {
+                updates[`${k}.debt`] = (current[k]?.debt || 0) + share;
+            });
+            transaction.update(ledgersRef, updates);
         });
         DataMgr.log('BILLING', `Allocated total bill ${amt}`);
-        DataMgr.save();
         UI.globalAlert('Bill Allocated Successfully', 'success');
     },
 
@@ -1014,6 +945,7 @@ const App = {
         });
         document.getElementById('search-results').innerHTML = html;
     },
+
     prefillPay: (id) => {
         document.getElementById('pay-acc').value = id;
         Router.go('collection');
@@ -1032,7 +964,6 @@ const App = {
         tbody.innerHTML = '';
         
         if(type === 'statement') {
-            // Redirect to statement section
             Router.go('statement');
             return;
         } else if(type === 'tx_household') {
@@ -1080,7 +1011,7 @@ const App = {
         document.getElementById('user-list-body').innerHTML = html;
     },
 
-    saveUser: () => {
+    saveUser: async () => {
         const u = document.getElementById('set-user').value;
         const p = document.getElementById('set-pass').value;
         const r = document.getElementById('set-role').value;
@@ -1088,42 +1019,57 @@ const App = {
         
         if(r === 'admin' && Auth.user.role !== 'superadmin') return alert("Only Superadmin can create Admins.");
 
-        const users = DataMgr.data.users;
-        const idx = users.findIndex(x => x.user === u);
-        
-        if(idx > -1) users[idx] = { user:u, pass:p, role:r };
-        else users.push({ user:u, pass:p, role:r });
-        
+        const usersRef = db.collection("users");
+        const existing = DataMgr.data.users.find(x => x.user === u);
+        if (existing) {
+            await usersRef.doc(existing.id).update({ user: u, pass: p, role: r });
+        } else {
+            await usersRef.add({ user: u, pass: p, role: r });
+        }
         DataMgr.log('USER_MGMT', `Updated/Created user ${u} as ${r}`);
-        DataMgr.save();
         UI.globalAlert('User Saved', 'success');
         App.loadUsers();
     },
 
-    deleteUser: (username) => {
+    deleteUser: async (username) => {
         if(confirm(`Delete user ${username}?`)) {
-            DataMgr.data.users = DataMgr.data.users.filter(u => u.user !== username);
-            DataMgr.log('USER_MGMT', `Deleted user ${username}`);
-            DataMgr.save();
-            App.loadUsers();
+            const userDoc = DataMgr.data.users.find(u => u.user === username);
+            if (userDoc && userDoc.id) {
+                await db.collection("users").doc(userDoc.id).delete();
+                DataMgr.log('USER_MGMT', `Deleted user ${username}`);
+                App.loadUsers();
+            }
         }
     },
 
-    wipeData: () => {
+    wipeData: async () => {
         if(document.getElementById('wipe-pass').value === 'supro123') {
             if(confirm('ARE YOU SURE? THIS IS PERMANENT.')) {
-                DataMgr.data.households = [];
-                DataMgr.data.transactions = [];
-                DataMgr.data.ledgers = {
-                    'Oduebo': { debt: 0, remitted: 0 },
-                    'Oparadim': { debt: 0, remitted: 0 },
-                    'Ezealaoma': { debt: 0, remitted: 0 }
-                };
-                DataMgr.data.remittances = [];
-                DataMgr.data.audit = [];
-                DataMgr.data.users = [{ user: 'Superadmin', pass: 'supro123', role: 'superadmin' }];
+                const batch = db.batch();
+                await db.collection("households").get().then(snapshot => {
+                    snapshot.docs.forEach(doc => batch.delete(doc.ref));
+                });
+                await db.collection("transactions").get().then(snapshot => {
+                    snapshot.docs.forEach(doc => batch.delete(doc.ref));
+                });
+                await db.collection("remittances").get().then(snapshot => {
+                    snapshot.docs.forEach(doc => batch.delete(doc.ref));
+                });
+                await db.collection("audit").get().then(snapshot => {
+                    snapshot.docs.forEach(doc => batch.delete(doc.ref));
+                });
+                batch.set(db.collection("metadata").doc("ledgers"), {
+                    Oduebo: { debt: 0, remitted: 0 },
+                    Oparadim: { debt: 0, remitted: 0 },
+                    Ezealaoma: { debt: 0, remitted: 0 }
+                });
+                await db.collection("users").get().then(snapshot => {
+                    snapshot.docs.forEach(doc => {
+                        if (doc.data().user !== 'Superadmin') batch.delete(doc.ref);
+                    });
+                });
+                await batch.commit();
                 
-                DataMgr.save();
                 alert('SYSTEM WIPED');
                 location.reload();
             }
@@ -1132,12 +1078,11 @@ const App = {
         }
     },
     
-    // --- Password Change Functions ---
     showChangePassword: () => {
         Router.go('change-password');
     },
     
-    changePassword: () => {
+    changePassword: async () => {
         const current = document.getElementById('current-pass').value;
         const newPass = document.getElementById('new-pass').value;
         const confirm = document.getElementById('confirm-pass').value;
@@ -1154,26 +1099,20 @@ const App = {
             return UI.globalAlert('Current password is incorrect', 'error');
         }
         
-        // Update password
-        const userIndex = DataMgr.data.users.findIndex(u => u.user === Auth.user.user);
-        if(userIndex !== -1) {
-            DataMgr.data.users[userIndex].pass = newPass;
-            Auth.user.pass = newPass; // Update current session
-            DataMgr.save();
-            DataMgr.log('PASSWORD_CHANGE', 'User changed password');
-            UI.globalAlert('Password updated successfully', 'success');
-            
-            // Clear form
-            document.getElementById('current-pass').value = '';
-            document.getElementById('new-pass').value = '';
-            document.getElementById('confirm-pass').value = '';
-            
-            // Return to dashboard
-            setTimeout(() => Router.go('dashboard'), 1500);
-        }
+        const userRef = db.collection("users").doc(Auth.user.id);
+        await userRef.update({ pass: newPass });
+        Auth.user.pass = newPass;
+        DataMgr.save(); // not needed but kept for compatibility
+        DataMgr.log('PASSWORD_CHANGE', 'User changed password');
+        UI.globalAlert('Password updated successfully', 'success');
+        
+        document.getElementById('current-pass').value = '';
+        document.getElementById('new-pass').value = '';
+        document.getElementById('confirm-pass').value = '';
+        
+        setTimeout(() => Router.go('dashboard'), 1500);
     },
     
-    // --- Statement of Account Functions ---
     loadStatement: (accountNo) => {
         if(!accountNo) return;
         
@@ -1187,11 +1126,9 @@ const App = {
             return;
         }
         
-        // Get transactions for this account
         const period = document.getElementById('stmt-period').value;
         let filteredTxs = DataMgr.data.transactions.filter(t => t.acc === accountNo);
         
-        // Filter by period if needed
         if(period !== 'all') {
             const now = new Date();
             if(period === 'current_month') {
@@ -1211,16 +1148,11 @@ const App = {
             }
         }
         
-        // Sort by date (newest first)
         filteredTxs.sort((a, b) => new Date(b.date) - new Date(a.date));
         
-        // Calculate totals
         const totalPaid = filteredTxs.reduce((sum, t) => sum + t.amount, 0);
-        
-        // Get kindred info
         const kindredLedger = DataMgr.data.ledgers[house.kindred] || { debt: 0, remitted: 0 };
         
-        // Create statement HTML
         let txsHtml = '';
         filteredTxs.forEach((tx, index) => {
             txsHtml += `
@@ -1300,7 +1232,6 @@ const App = {
         
         document.getElementById('statement-content').innerHTML = statementHtml;
         
-        // Store current statement for printing
         currentStatement = {
             account: house,
             transactions: filteredTxs,
@@ -1314,7 +1245,7 @@ const App = {
     }
 };
 
-// --- PRINTER (RECEIPTS) ---
+// ==================== PRINTER ====================
 const Printer = {
     render: (html) => {
         document.getElementById('receipt-content').innerHTML = html;
@@ -1440,6 +1371,7 @@ const Printer = {
     }
 };
 
+// ==================== UI HELPER ====================
 const UI = {
     alert: (id, msg, type) => {
         const el = document.getElementById(id);
@@ -1451,6 +1383,7 @@ const UI = {
     globalAlert: (msg, type) => UI.alert('global-alert', msg, type)
 };
 
+// Initialize Firebase listeners
 DataMgr.init();
 </script>
 </body>
