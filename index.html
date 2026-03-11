@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ntu Electricity Management System v4.0 (Firebase)</title>
+    <title>Ntu Electricity Management System v4.1 (Custom Billing Formula)</title>
     <!-- Firebase SDK (compat version) -->
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
@@ -106,8 +106,8 @@
 <!-- LOGIN VIEW -->
 <div id="view-login" class="container" style="max-width: 400px; margin-top: 60px; padding: 20px;">
     <div style="text-align: center; margin-bottom: 20px;">
-        <h2 style="color: var(--primary);">Ntu Electricity System v4.0</h2>
-        <p>Firebase Cloud Storage</p>
+        <h2 style="color: var(--primary);">Ntu Electricity System v4.1</h2>
+        <p>Custom Billing Formula</p>
     </div>
     
     <div style="background: #eef2f7; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center;">
@@ -335,17 +335,39 @@
         </div>
     </div>
 
-    <!-- BILLING -->
+    <!-- BILLING (with custom formula) -->
     <div id="billing" class="section">
         <h3>Monthly Village Billing</h3>
         <div class="alert alert-warning" style="display:block">
-            Input the total bulk bill for the village. This will be automatically split 33.33% to each Kindred.
+            Input the total bulk bill for the village. This will be split according to the current billing formula.
         </div>
         <div class="form-group">
             <label>Total Bill Amount (₦)</label>
             <input type="number" id="bill-amount">
         </div>
         <button class="btn btn-primary" onclick="App.addBill()">Allocate Bill</button>
+
+        <!-- Billing Formula Card (visible only to superadmin) -->
+        <div id="billing-formula-card" style="margin-top: 30px; border: 1px solid #3498db; padding: 20px; border-radius: 8px; background: #f0f8ff;">
+            <h4 style="color: #2980b9;">⚙️ Billing Allocation Formula (Superadmin Only)</h4>
+            <p>Set the percentage share for each kindred. Total must equal 100%.</p>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Oduebo (%)</label>
+                    <input type="number" id="formula-oduebo" step="0.01" min="0" max="100" value="33.33">
+                </div>
+                <div class="form-group">
+                    <label>Oparadim (%)</label>
+                    <input type="number" id="formula-oparadim" step="0.01" min="0" max="100" value="33.33">
+                </div>
+                <div class="form-group">
+                    <label>Ezealaoma (%)</label>
+                    <input type="number" id="formula-ezealaoma" step="0.01" min="0" max="100" value="33.33">
+                </div>
+            </div>
+            <div id="formula-total-error" style="color: red; display: none; margin-bottom: 10px;">Total must be 100%</div>
+            <button class="btn btn-primary" onclick="App.saveBillingFormula()">Save Formula</button>
+        </div>
     </div>
 
     <!-- SEARCH -->
@@ -537,7 +559,8 @@ const DataMgr = {
         ledgers: { Oduebo: { debt: 0, remitted: 0 }, Oparadim: { debt: 0, remitted: 0 }, Ezealaoma: { debt: 0, remitted: 0 } },
         transactions: [],
         remittances: [],
-        audit: []
+        audit: [],
+        billingFormula: { Oduebo: 33.33, Oparadim: 33.33, Ezealaoma: 33.33 } // default
     },
 
     // Initialize listeners to sync data from Firestore
@@ -582,6 +605,23 @@ const DataMgr = {
                     .catch(err => console.warn("Could not create ledgers document:", err));
             }
         }, error => console.error("Ledgers listener error:", error));
+
+        // Billing formula document
+        db.collection("settings").doc("billingFormula").onSnapshot(doc => {
+            if (doc.exists) {
+                DataMgr.data.billingFormula = doc.data();
+                // Update UI if superadmin is logged in and on billing page
+                if (Auth.user && Auth.user.role === 'superadmin') {
+                    document.getElementById('formula-oduebo').value = doc.data().Oduebo || 33.33;
+                    document.getElementById('formula-oparadim').value = doc.data().Oparadim || 33.33;
+                    document.getElementById('formula-ezealaoma').value = doc.data().Ezealaoma || 33.33;
+                }
+            } else {
+                // Create default formula
+                db.collection("settings").doc("billingFormula").set(DataMgr.data.billingFormula)
+                    .catch(err => console.warn("Could not create billing formula:", err));
+            }
+        }, error => console.error("Billing formula listener error:", error));
 
         // --- CREATE DEFAULT SUPERADMIN IF NO USERS EXIST (with error handling) ---
         try {
@@ -764,6 +804,10 @@ const Router = {
         if(role === 'superadmin') {
             document.getElementById('nav-audit').classList.remove('hidden');
             document.getElementById('nav-wipe').classList.remove('hidden');
+            // Show billing formula card only to superadmin
+            document.getElementById('billing-formula-card').style.display = 'block';
+        } else {
+            document.getElementById('billing-formula-card').style.display = 'none';
         }
 
         const today = new Date().toISOString().split('T')[0];
@@ -924,10 +968,36 @@ const App = {
         document.getElementById('remit-history-body').innerHTML = html;
     },
 
+    // Save billing formula (superadmin only)
+    saveBillingFormula: async () => {
+        const oduebo = parseFloat(document.getElementById('formula-oduebo').value) || 0;
+        const oparadim = parseFloat(document.getElementById('formula-oparadim').value) || 0;
+        const ezealaoma = parseFloat(document.getElementById('formula-ezealaoma').value) || 0;
+        const total = oduebo + oparadim + ezealaoma;
+        if (Math.abs(total - 100) > 0.01) {
+            document.getElementById('formula-total-error').style.display = 'block';
+            return;
+        }
+        document.getElementById('formula-total-error').style.display = 'none';
+        const formula = { Oduebo: oduebo, Oparadim: oparadim, Ezealaoma: ezealaoma };
+        try {
+            await db.collection("settings").doc("billingFormula").set(formula);
+            UI.globalAlert('Billing formula saved', 'success');
+            DataMgr.log('BILLING_FORMULA', `Updated formula: ${JSON.stringify(formula)}`);
+        } catch (e) {
+            UI.globalAlert('Save failed – check permissions', 'error');
+        }
+    },
+
     addBill: async () => {
         const amt = parseFloat(document.getElementById('bill-amount').value);
         if(!amt) return;
-        const share = amt / 3;
+        // Use current billing formula from DataMgr.data.billingFormula
+        const formula = DataMgr.data.billingFormula || { Oduebo: 33.33, Oparadim: 33.33, Ezealaoma: 33.33 };
+        const odueboShare = amt * formula.Oduebo / 100;
+        const oparadimShare = amt * formula.Oparadim / 100;
+        const ezealaomaShare = amt * formula.Ezealaoma / 100;
+
         const ledgersRef = db.collection("metadata").doc("ledgers");
         try {
             await db.runTransaction(async (transaction) => {
@@ -936,13 +1006,14 @@ const App = {
                     transaction.set(ledgersRef, DataMgr.data.ledgers);
                 }
                 const current = ledgersDoc.data() || DataMgr.data.ledgers;
-                const updates = {};
-                ['Oduebo', 'Oparadim', 'Ezealaoma'].forEach(k => {
-                    updates[`${k}.debt`] = (current[k]?.debt || 0) + share;
-                });
+                const updates = {
+                    'Oduebo.debt': (current.Oduebo?.debt || 0) + odueboShare,
+                    'Oparadim.debt': (current.Oparadim?.debt || 0) + oparadimShare,
+                    'Ezealaoma.debt': (current.Ezealaoma?.debt || 0) + ezealaomaShare
+                };
                 transaction.update(ledgersRef, updates);
             });
-            DataMgr.log('BILLING', `Allocated total bill ${amt}`);
+            DataMgr.log('BILLING', `Allocated total bill ${amt} using formula ${JSON.stringify(formula)}`);
             UI.globalAlert('Bill Allocated Successfully', 'success');
         } catch (e) {
             UI.globalAlert('Billing failed – check permissions', 'error');
