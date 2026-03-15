@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ntu Electricity Management System v4.3 (Simplified Statements)</title>
+    <title>Ntu Electricity Management System v4.4 (Kindred Access Control)</title>
     <!-- Firebase SDK (compat version) -->
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
@@ -113,8 +113,8 @@
 <!-- LOGIN + PUBLIC STATEMENT VIEW -->
 <div id="view-login" class="container" style="max-width: 400px; margin-top: 60px; padding: 20px;">
     <div style="text-align: center; margin-bottom: 20px;">
-        <h2 style="color: var(--primary);">Ntu Electricity System v4.3</h2>
-        <p>Simplified Statements</p>
+        <h2 style="color: var(--primary);">Ntu Electricity System v4.4</h2>
+        <p>Kindred Access Control</p>
     </div>
     
     <div style="background: #eef2f7; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center;">
@@ -462,10 +462,19 @@
             </div>
             <div class="form-group">
                 <label>Role</label>
-                <select id="set-role">
+                <select id="set-role" onchange="UserMgmt.toggleKindredField()">
                     <option value="collector">Collection Officer</option>
                     <option value="leader">Kindred Leader</option>
                     <option value="admin">Administrator</option>
+                    <option value="superadmin">Superadmin</option>
+                </select>
+            </div>
+            <div class="form-group" id="kindred-field-group" style="display: none;">
+                <label>Assigned Kindred</label>
+                <select id="set-kindred">
+                    <option value="Oduebo">Oduebo</option>
+                    <option value="Oparadim">Oparadim</option>
+                    <option value="Ezealaoma">Ezealaoma</option>
                 </select>
             </div>
             <button class="btn btn-primary" onclick="App.saveUser()">Save/Update User</button>
@@ -474,7 +483,7 @@
         <h4>Existing Users</h4>
         <div class="table-responsive">
             <table>
-                <thead><tr><th>Username</th><th>Role</th><th>Action</th></tr></thead>
+                <thead><tr><th>Username</th><th>Role</th><th>Kindred</th><th>Action</th></tr></thead>
                 <tbody id="user-list-body"></tbody>
             </table>
         </div>
@@ -662,7 +671,8 @@ const DataMgr = {
                 await db.collection("users").add({
                     user: "Superadmin",
                     pass: "supro123",
-                    role: "superadmin"
+                    role: "superadmin",
+                    kindred: null  // superadmin has no kindred restriction
                 });
                 console.log("Default Superadmin user created.");
             } else {
@@ -807,6 +817,32 @@ const Auth = {
     logout: () => {
         DataMgr.log('LOGOUT', 'User logged out');
         location.reload();
+    },
+    // Helper to check if user can access a kindred
+    canAccessKindred: (kindred) => {
+        if (!Auth.user) return false;
+        if (Auth.user.role === 'superadmin' || Auth.user.role === 'admin') return true;
+        if ((Auth.user.role === 'collector' || Auth.user.role === 'leader') && Auth.user.kindred === kindred) return true;
+        return false;
+    },
+    // Filter households based on user's kindred
+    filterHouseholds: () => {
+        if (!Auth.user) return [];
+        if (Auth.user.role === 'superadmin' || Auth.user.role === 'admin') return DataMgr.data.households;
+        if (Auth.user.kindred) return DataMgr.data.households.filter(h => h.kindred === Auth.user.kindred);
+        return []; // collector/leader with no kindred assigned sees nothing
+    },
+    filterTransactions: () => {
+        if (!Auth.user) return [];
+        if (Auth.user.role === 'superadmin' || Auth.user.role === 'admin') return DataMgr.data.transactions;
+        if (Auth.user.kindred) return DataMgr.data.transactions.filter(t => t.kindred === Auth.user.kindred);
+        return [];
+    },
+    filterRemittances: () => {
+        if (!Auth.user) return [];
+        if (Auth.user.role === 'superadmin' || Auth.user.role === 'admin') return DataMgr.data.remittances;
+        if (Auth.user.kindred && Auth.user.role === 'leader') return DataMgr.data.remittances.filter(r => r.kindred === Auth.user.kindred);
+        return []; // collectors don't see remittances
     }
 };
 
@@ -932,8 +968,12 @@ const Router = {
         const role = Auth.user.role;
         const badgeClass = `badge-${role}`;
         
+        let roleText = `${role.toUpperCase()}`;
+        if ((role === 'collector' || role === 'leader') && Auth.user.kindred) {
+            roleText += ` (${Auth.user.kindred})`;
+        }
         document.getElementById('user-role-display').innerHTML = `
-            Logged in as: <strong>${Auth.user.user}</strong> <span class="badge ${badgeClass}">${role.toUpperCase()}</span>`;
+            Logged in as: <strong>${Auth.user.user}</strong> <span class="badge ${badgeClass}">${roleText}</span>`;
         
         document.getElementById('admin-menu').classList.add('hidden');
         document.getElementById('field-menu').classList.add('hidden');
@@ -942,6 +982,11 @@ const Router = {
 
         if(role === 'collector' || role === 'leader') {
             document.getElementById('field-menu').classList.remove('hidden');
+        }
+
+        // Leaders can access remittance
+        if(role === 'leader') {
+            document.getElementById('nav-remittance').style.display = 'inline-block';
         }
 
         if(role === 'admin' || role === 'superadmin') {
@@ -975,6 +1020,24 @@ const Router = {
         lastMonth.setMonth(lastMonth.getMonth() - 1);
         document.getElementById('stmt-date-from').value = lastMonth.toISOString().split('T')[0];
         document.getElementById('stmt-date-to').value = todayDate.toISOString().split('T')[0];
+
+        // Disable kindred dropdown for collectors/leaders on registration page
+        if (role === 'collector' || role === 'leader') {
+            document.getElementById('reg-kindred').disabled = true;
+            if (Auth.user.kindred) {
+                document.getElementById('reg-kindred').value = Auth.user.kindred;
+            }
+        } else {
+            document.getElementById('reg-kindred').disabled = false;
+        }
+
+        // Disable kindred dropdown for leaders on remittance page
+        if (role === 'leader' && Auth.user.kindred) {
+            document.getElementById('remit-kindred').disabled = true;
+            document.getElementById('remit-kindred').value = Auth.user.kindred;
+        } else {
+            document.getElementById('remit-kindred').disabled = false;
+        }
 
         Router.go('dashboard');
     },
@@ -1016,12 +1079,20 @@ const App = {
     },
 
     registerHousehold: async () => {
-        const k = document.getElementById('reg-kindred').value;
+        let k = document.getElementById('reg-kindred').value;
         const s = document.getElementById('reg-sub').value;
         const o = document.getElementById('reg-owner').value;
         const p = document.getElementById('reg-phone').value;
 
         if(!s || !o || !p) return UI.globalAlert('Fill all fields', 'error');
+
+        // For collectors/leaders, ensure kindred is theirs (they can't change it)
+        if (Auth.user.role === 'collector' || Auth.user.role === 'leader') {
+            if (Auth.user.kindred && k !== Auth.user.kindred) {
+                UI.globalAlert('You can only register households in your assigned kindred', 'error');
+                return;
+            }
+        }
 
         const id = App.generateID(k, s, o, p);
         if(DataMgr.data.households.find(h => h.id === id)) return UI.globalAlert('Account Exists: ' + id, 'error');
@@ -1051,6 +1122,11 @@ const App = {
         const house = DataMgr.data.households.find(h => h.id === id);
         if(!house) return UI.globalAlert('Invalid Account Number', 'error');
 
+        // Check kindred access
+        if (!Auth.canAccessKindred(house.kindred)) {
+            return UI.globalAlert('You are not authorized to collect payment from this kindred', 'error');
+        }
+
         const ref = 'TX' + Date.now().toString().slice(-6);
         const tx = { ref, acc: id, kindred: house.kindred, owner: house.owner, amount: amt, date, particulars: part, by: Auth.user.user };
 
@@ -1066,12 +1142,20 @@ const App = {
     },
 
     processRemittance: async () => {
-        const k = document.getElementById('remit-kindred').value;
+        let k = document.getElementById('remit-kindred').value;
         const amt = parseFloat(document.getElementById('remit-amt').value);
         const date = document.getElementById('remit-date').value;
         const note = document.getElementById('remit-note').value;
 
         if(!amt || !date) return UI.globalAlert('Enter amount and date', 'error');
+
+        // For leaders, ensure kindred is theirs
+        if (Auth.user.role === 'leader') {
+            if (Auth.user.kindred && k !== Auth.user.kindred) {
+                UI.globalAlert('You can only remit for your assigned kindred', 'error');
+                return;
+            }
+        }
 
         const ledgersRef = db.collection("metadata").doc("ledgers");
         try {
@@ -1100,7 +1184,7 @@ const App = {
     },
 
     loadRemittances: () => {
-        const list = DataMgr.data.remittances.slice().reverse();
+        const list = Auth.filterRemittances().slice().reverse();
         let html = '';
         list.forEach(r => {
             html += `<tr>
@@ -1168,32 +1252,36 @@ const App = {
     },
 
     loadDashboard: () => {
-        const h = DataMgr.data.households;
-        const txs = DataMgr.data.transactions;
-        const l = DataMgr.data.ledgers;
+        const households = Auth.filterHouseholds();
+        const transactions = Auth.filterTransactions();
+        const remittances = Auth.filterRemittances();
+        const ledgers = DataMgr.data.ledgers;
 
-        document.getElementById('dash-households').innerText = h.length;
+        document.getElementById('dash-households').innerText = households.length;
 
         let totalDebt = 0;
         let totalRemitted = 0;
-        let totalCollected = txs.reduce((sum, t) => sum + t.amount, 0);
+        let totalCollected = transactions.reduce((sum, t) => sum + t.amount, 0);
         let tableHtml = '';
 
-        for(let k in l) {
-            totalDebt += l[k].debt;
-            totalRemitted += l[k].remitted;
-            const kindredCollected = txs.filter(t => t.kindred === k).reduce((s,t) => s + t.amount, 0);
-            const balance = l[k].debt - l[k].remitted;
+        const kindreds = (Auth.user.role === 'superadmin' || Auth.user.role === 'admin') ? ['Oduebo','Oparadim','Ezealaoma'] : [Auth.user.kindred];
+
+        kindreds.forEach(k => {
+            if (!k) return;
+            totalDebt += ledgers[k]?.debt || 0;
+            totalRemitted += ledgers[k]?.remitted || 0;
+            const kindredCollected = transactions.filter(t => t.kindred === k).reduce((s,t) => s + t.amount, 0);
+            const balance = (ledgers[k]?.debt || 0) - (ledgers[k]?.remitted || 0);
 
             tableHtml += `
                 <tr>
                     <td>${k}</td>
-                    <td>₦${l[k].debt.toFixed(2)}</td>
+                    <td>₦${(ledgers[k]?.debt || 0).toFixed(2)}</td>
                     <td>₦${kindredCollected.toFixed(2)}</td>
-                    <td>₦${l[k].remitted.toFixed(2)}</td>
+                    <td>₦${(ledgers[k]?.remitted || 0).toFixed(2)}</td>
                     <td style="color:${balance > 0 ? 'red':'green'}">₦${balance.toFixed(2)}</td>
                 </tr>`;
-        }
+        });
         document.getElementById('dash-debt').innerText = '₦' + totalDebt.toFixed(2);
         document.getElementById('dash-collected').innerText = '₦' + totalCollected.toFixed(2);
         document.getElementById('dash-remitted').innerText = '₦' + totalRemitted.toFixed(2);
@@ -1203,7 +1291,8 @@ const App = {
     search: (q) => {
         q = q.toLowerCase();
         if(q.length < 2) return;
-        const res = DataMgr.data.households.filter(h => 
+        const houses = Auth.filterHouseholds();
+        const res = houses.filter(h => 
             h.id.toLowerCase().includes(q) || h.owner.toLowerCase().includes(q) || h.phone.includes(q)
         );
         let html = '';
@@ -1241,23 +1330,28 @@ const App = {
             return;
         } else if(type === 'tx_household') {
             thead.innerHTML = '<tr><th>Date</th><th>Ref</th><th>Acc</th><th>Kindred</th><th>Amount</th><th>Particulars</th></tr>';
-            DataMgr.data.transactions.forEach(d => {
+            const txs = Auth.filterTransactions();
+            txs.forEach(d => {
                 tbody.innerHTML += `<tr><td>${d.date}</td><td>${d.ref}</td><td>${d.acc}</td><td>${d.kindred}</td><td>${d.amount}</td><td>${d.particulars}</td></tr>`;
             });
         } else if (type === 'tx_remittance') {
             thead.innerHTML = '<tr><th>Date</th><th>Kindred</th><th>Amount</th><th>Ref</th><th>By</th></tr>';
-            DataMgr.data.remittances.forEach(d => {
+            const remits = Auth.filterRemittances();
+            remits.forEach(d => {
                 tbody.innerHTML += `<tr><td>${d.date}</td><td>${d.kindred}</td><td>${d.amount}</td><td>${d.ref}</td><td>${d.by}</td></tr>`;
             });
         } else {
             thead.innerHTML = '<tr><th>ID</th><th>Owner</th><th>Kindred</th><th>Sub</th><th>Phone</th></tr>';
-            DataMgr.data.households.forEach(d => {
+            const houses = Auth.filterHouseholds();
+            houses.forEach(d => {
                 tbody.innerHTML += `<tr><td>${d.id}</td><td>${d.owner}</td><td>${d.kindred}</td><td>${d.sub}</td><td>${d.phone}</td></tr>`;
             });
         }
     },
 
     loadAudit: () => {
+        // Only superadmin can view audit
+        if (Auth.user.role !== 'superadmin') return;
         const data = DataMgr.data.audit;
         let html = '';
         data.forEach(a => {
@@ -1279,7 +1373,8 @@ const App = {
             if(currentUser.role === 'superadmin' && u.role !== 'superadmin') {
                 actions = `<button class="btn btn-danger btn-sm" onclick="App.deleteUser('${u.user}')">Delete</button>`;
             }
-            html += `<tr><td>${u.user}</td><td>${u.role}</td><td>${actions}</td></tr>`;
+            const kindredDisplay = u.kindred ? u.kindred : (u.role === 'collector' || u.role === 'leader' ? '—' : '');
+            html += `<tr><td>${u.user}</td><td>${u.role}</td><td>${kindredDisplay}</td><td>${actions}</td></tr>`;
         });
         document.getElementById('user-list-body').innerHTML = html;
     },
@@ -1288,21 +1383,32 @@ const App = {
         const u = document.getElementById('set-user').value;
         const p = document.getElementById('set-pass').value;
         const r = document.getElementById('set-role').value;
+        const kindred = document.getElementById('set-kindred').value;
+
         if(!u || !p) return;
         
         if(r === 'admin' && Auth.user.role !== 'superadmin') return alert("Only Superadmin can create Admins.");
+
+        // Ensure kindred is provided for collectors and leaders
+        if ((r === 'collector' || r === 'leader') && !kindred) {
+            alert('Please select a kindred for this role.');
+            return;
+        }
 
         const usersRef = db.collection("users");
         const existing = DataMgr.data.users.find(x => x.user === u);
         try {
             if (existing) {
-                await usersRef.doc(existing.id).update({ user: u, pass: p, role: r });
+                await usersRef.doc(existing.id).update({ user: u, pass: p, role: r, kindred: kindred || null });
             } else {
-                await usersRef.add({ user: u, pass: p, role: r });
+                await usersRef.add({ user: u, pass: p, role: r, kindred: kindred || null });
             }
             DataMgr.log('USER_MGMT', `Updated/Created user ${u} as ${r}`);
             UI.globalAlert('User Saved', 'success');
             App.loadUsers();
+            // Clear form
+            document.getElementById('set-user').value = '';
+            document.getElementById('set-pass').value = '';
         } catch (e) {
             UI.globalAlert('Save failed – check permissions', 'error');
         }
@@ -1408,6 +1514,16 @@ const App = {
             document.getElementById('statement-content').innerHTML = `
                 <div style="text-align: center; padding: 40px; color: #c0392b;">
                     Account not found: ${accountNo}
+                </div>`;
+            document.getElementById('print-statement-btn').style.display = 'none';
+            return;
+        }
+
+        // Check kindred access
+        if (!Auth.canAccessKindred(house.kindred)) {
+            document.getElementById('statement-content').innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #c0392b;">
+                    You are not authorized to view this account.
                 </div>`;
             document.getElementById('print-statement-btn').style.display = 'none';
             return;
@@ -1518,6 +1634,19 @@ const App = {
         };
         
         document.getElementById('print-statement-btn').style.display = 'inline-block';
+    }
+};
+
+// ==================== USER MANAGEMENT HELPER ====================
+const UserMgmt = {
+    toggleKindredField: () => {
+        const role = document.getElementById('set-role').value;
+        const kindredGroup = document.getElementById('kindred-field-group');
+        if (role === 'collector' || role === 'leader') {
+            kindredGroup.style.display = 'block';
+        } else {
+            kindredGroup.style.display = 'none';
+        }
     }
 };
 
